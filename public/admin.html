@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IBMDT Run Admin</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap");
+
+    :root {
+      --bg: #eff7f3;
+      --card: #fff;
+      --text: #10231b;
+      --muted: #5f6f67;
+      --line: #d4e1da;
+      --ok: #0d8c46;
+      --danger: #bf3450;
+      --accent: #0d7a59;
+      --accent-2: #16a379;
+      --soft: #edf6f1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans Thai", "Thonburi", sans-serif;
+      background:
+        radial-gradient(circle at 90% 6%, #ffe9d8 0%, rgba(255, 233, 216, 0) 38%),
+        radial-gradient(circle at 0% 40%, #d7f4ea 0%, rgba(215, 244, 234, 0) 40%),
+        linear-gradient(145deg, #eef9f4 0%, #f2f7fb 50%, #fff9f2 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1220px; margin: 0 auto; padding: 20px 18px 30px; }
+    h1 {
+      margin: 4px 0 4px;
+      font-size: 33px;
+      color: #154534;
+      letter-spacing: .2px;
+    }
+    .subtitle {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    h2 {
+      margin-top: 0;
+      color: #1d4f3b;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 15px;
+      margin-bottom: 14px;
+      box-shadow: 0 12px 28px rgba(18, 44, 34, .09);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent-2), #ff8b42);
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    input, select, button {
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 9px 11px;
+      font-size: 15px;
+      background: #fff;
+      transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    input:focus, select:focus {
+      border-color: var(--accent-2);
+      box-shadow: 0 0 0 4px rgba(22, 163, 121, .2);
+      transform: translateY(-1px);
+      outline: none;
+    }
+    button { font-weight: 700; cursor: pointer; }
+    button:hover { transform: translateY(-1px); }
+    .primary {
+      background: linear-gradient(120deg, var(--accent-2), var(--accent));
+      color: #fff;
+      border-color: transparent;
+      box-shadow: 0 8px 16px rgba(13, 122, 89, .22);
+    }
+    .danger { background: #fff3f5; color: var(--danger); border-color: #efc7cf; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      border: 1px solid #e2ebe6;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: var(--soft);
+      color: #244337;
+    }
+    tr:nth-child(even) td {
+      background: #fcfffd;
+    }
+    .muted { color: var(--muted); }
+    .status {
+      min-height: 22px;
+      font-weight: 700;
+      margin-top: 10px;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 11px;
+      background: #edf5f1;
+      color: #245241;
+      font-weight: 700;
+      font-size: 13px;
+      border: 1px solid #d3e3db;
+    }
+    .locked {
+      opacity: .55;
+      pointer-events: none;
+      user-select: none;
+    }
+    .hidden { display: none; }
+    .ok { color: var(--ok); }
+    .err { color: var(--danger); }
+    .split {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    @media (min-width: 900px) {
+      .split { grid-template-columns: 1fr 1.4fr; }
+    }
+    @media (max-width: 640px) {
+      h1 { font-size: 28px; }
+      .wrap { padding: 14px; }
+      .card { border-radius: 15px; }
+      .row button {
+        flex: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>IBMDT Run Admin</h1>
+    <p class="subtitle">จัดการทีมและติดตามรายชื่อผู้สมัครแบบเรียลไทม์</p>
+    <div class="card">
+      <div class="row">
+        <strong>สถานะการเข้าใช้งาน</strong>
+        <span id="authBadge" class="chip">ยังไม่ล็อกอิน</span>
+        <div id="googleLoginContainer"></div>
+        <button id="logoutBtn" class="danger hidden">Logout</button>
+        <button id="reloadBtn">รีโหลดข้อมูล</button>
+      </div>
+      <p id="authHint" class="muted">ระบบรองรับ Google SSO และ session ที่ปลอดภัยด้วย HttpOnly cookie</p>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div class="split">
+      <section id="teamsSection" class="card locked">
+        <h2>จัดการทีม</h2>
+        <div class="row" style="margin-bottom: 10px">
+          <input id="teamName" placeholder="ชื่อทีม" />
+          <input id="teamOrder" type="number" placeholder="Sort" value="0" style="width: 90px" />
+          <button id="addTeamBtn" class="primary">เพิ่มทีม</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ชื่อทีม</th>
+              <th>Sort</th>
+              <th>Active</th>
+              <th>สมาชิก</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="teamsBody"></tbody>
+        </table>
+      </section>
+
+      <section id="regsSection" class="card locked">
+        <h2>รายชื่อผู้สมัคร</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>เวลา</th>
+              <th>Display</th>
+              <th>ชื่อจริง</th>
+              <th>เพศ</th>
+              <th>ปีเกิด</th>
+              <th>ทีม</th>
+              <th>LINE User ID</th>
+            </tr>
+          </thead>
+          <tbody id="regsBody"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const authBadgeEl = document.getElementById("authBadge");
+    const authHintEl = document.getElementById("authHint");
+    const googleLoginContainerEl = document.getElementById("googleLoginContainer");
+    const logoutBtnEl = document.getElementById("logoutBtn");
+    const teamsSectionEl = document.getElementById("teamsSection");
+    const regsSectionEl = document.getElementById("regsSection");
+    const statusEl = document.getElementById("status");
+    const teamsBody = document.getElementById("teamsBody");
+    const regsBody = document.getElementById("regsBody");
+    const reloadBtnEl = document.getElementById("reloadBtn");
+
+    const authState = {
+      ssoEnabled: false,
+      googleClientId: "",
+      apiKeyFallbackEnabled: false,
+      admin: null,
+      googleReady: false,
+    };
+
+    function setStatus(text, type) {
+      statusEl.textContent = text;
+      statusEl.className = "status " + (type || "");
+    }
+
+    function setLocked(locked) {
+      teamsSectionEl.classList.toggle("locked", locked);
+      regsSectionEl.classList.toggle("locked", locked);
+    }
+
+    function renderAuthState() {
+      const isAuthed = Boolean(authState.admin);
+      if (isAuthed) {
+        const label = authState.admin.name
+          ? `${authState.admin.name} (${authState.admin.email})`
+          : authState.admin.email;
+        authBadgeEl.textContent = `ล็อกอินแล้ว: ${label}`;
+        authBadgeEl.style.background = "#e6f7ef";
+        authBadgeEl.style.color = "#12583e";
+        setLocked(false);
+      } else {
+        authBadgeEl.textContent = "ยังไม่ล็อกอิน";
+        authBadgeEl.style.background = "#f1f5f3";
+        authBadgeEl.style.color = "#5d6e66";
+        setLocked(true);
+      }
+
+      logoutBtnEl.classList.toggle("hidden", !isAuthed);
+      googleLoginContainerEl.classList.toggle("hidden", !authState.ssoEnabled || isAuthed);
+      if (!authState.ssoEnabled) {
+        authHintEl.textContent = "ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID กรุณาติดต่อผู้ดูแลระบบ";
+      } else if (!isAuthed) {
+        authHintEl.textContent = "กรุณา Sign in ด้วยบัญชี Google ที่ได้รับสิทธิ์ก่อนใช้งาน";
+      } else {
+        authHintEl.textContent = "ยืนยันตัวตนสำเร็จ สามารถจัดการข้อมูลได้แล้ว";
+      }
+    }
+
+    function parseApiError(data, fallback) {
+      if (data && typeof data.error === "string" && data.error) {
+        return data.error;
+      }
+      return fallback;
+    }
+
+    function adminFetch(url, options) {
+      const headers = {
+        "Content-Type": "application/json",
+        ...(options && options.headers ? options.headers : {})
+      };
+
+      return fetch(url, {
+        ...(options || {}),
+        credentials: "include",
+        headers,
+      });
+    }
+
+    async function loadAuthConfig() {
+      const res = await fetch("/api/auth/config", { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(parseApiError(data, "โหลด config auth ไม่สำเร็จ"));
+      }
+
+      authState.ssoEnabled = Boolean(data.ssoEnabled && data.googleClientId);
+      authState.googleClientId = data.googleClientId || "";
+      authState.apiKeyFallbackEnabled = Boolean(data.apiKeyFallbackEnabled);
+    }
+
+    async function loadCurrentAdmin() {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.status === 401) {
+        authState.admin = null;
+        renderAuthState();
+        return false;
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(parseApiError(data, "ตรวจสอบผู้ใช้ปัจจุบันไม่สำเร็จ"));
+      }
+
+      authState.admin = data.admin || null;
+      renderAuthState();
+      return true;
+    }
+
+    async function ensureGoogleSdk() {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        return;
+      }
+
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    async function handleGoogleCredential(response) {
+      try {
+        if (!response || !response.credential) {
+          throw new Error("ไม่ได้รับ credential จาก Google");
+        }
+
+        const res = await fetch("/api/auth/google", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential: response.credential })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(parseApiError(data, "Login ไม่สำเร็จ"));
+        }
+
+        authState.admin = data.admin || null;
+        renderAuthState();
+        setStatus("เข้าสู่ระบบสำเร็จ", "ok");
+        await reloadAll();
+      } catch (err) {
+        setStatus(err.message || "เกิดข้อผิดพลาดตอน Sign in", "err");
+      }
+    }
+
+    async function initGoogleLogin() {
+      if (!authState.ssoEnabled) {
+        renderAuthState();
+        return;
+      }
+
+      await ensureGoogleSdk();
+      window.google.accounts.id.initialize({
+        client_id: authState.googleClientId,
+        callback: handleGoogleCredential,
+      });
+      googleLoginContainerEl.innerHTML = "";
+      window.google.accounts.id.renderButton(googleLoginContainerEl, {
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+      });
+      authState.googleReady = true;
+      renderAuthState();
+    }
+
+    async function loadTeams() {
+      const res = await adminFetch("/api/admin/teams");
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(parseApiError(data, "โหลดทีมไม่สำเร็จ"));
+      }
+
+      teamsBody.innerHTML = "";
+      for (const t of data.teams) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${t.name}</td>
+          <td><input type="number" value="${t.sortOrder}" data-role="sort" data-id="${t.id}" style="width:80px" /></td>
+          <td><input type="checkbox" ${t.isActive ? "checked" : ""} data-role="active" data-id="${t.id}" /></td>
+          <td>${t._count.registrations}</td>
+          <td><button class="danger" data-role="delete" data-id="${t.id}">ลบ</button></td>
+        `;
+        teamsBody.appendChild(tr);
+      }
+    }
+
+    async function loadRegistrations() {
+      const res = await adminFetch("/api/admin/registrations");
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(parseApiError(data, "โหลดผู้สมัครไม่สำเร็จ"));
+      }
+
+      regsBody.innerHTML = "";
+      for (const r of data.registrations) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${new Date(r.createdAt).toLocaleString()}</td>
+          <td>${r.displayName}</td>
+          <td>${r.fullName}</td>
+          <td>${r.gender}</td>
+          <td>${r.birthYear}</td>
+          <td>${r.team ? r.team.name : "-"}</td>
+          <td class="muted">${r.lineUserId}</td>
+        `;
+        regsBody.appendChild(tr);
+      }
+    }
+
+    async function reloadAll() {
+      if (!authState.admin) {
+        throw new Error("กรุณา Sign in ก่อนใช้งาน");
+      }
+
+      await Promise.all([loadTeams(), loadRegistrations()]);
+      setStatus("โหลดข้อมูลสำเร็จ", "ok");
+    }
+
+    reloadBtnEl.addEventListener("click", () => {
+      reloadAll().catch((e) => setStatus(e.message || "เกิดข้อผิดพลาด", "err"));
+    });
+
+    logoutBtnEl.addEventListener("click", async () => {
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include"
+        });
+      } finally {
+        window.location.replace("/admin/login?next=%2Fadmin");
+      }
+    });
+
+    document.getElementById("addTeamBtn").addEventListener("click", async () => {
+      const name = document.getElementById("teamName").value.trim();
+      const sortOrder = Number(document.getElementById("teamOrder").value || "0");
+      if (!name) {
+        setStatus("กรุณากรอกชื่อทีม", "err");
+        return;
+      }
+
+      try {
+        const res = await adminFetch("/api/admin/teams", {
+          method: "POST",
+          body: JSON.stringify({ name, sortOrder, isActive: true })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(parseApiError(data, "เพิ่มทีมไม่สำเร็จ"));
+        }
+        document.getElementById("teamName").value = "";
+        await reloadAll();
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    teamsBody.addEventListener("change", async (ev) => {
+      const target = ev.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      const id = target.dataset.id;
+      const role = target.dataset.role;
+      if (!id || !role) return;
+
+      const patch = {};
+      if (role === "active") patch.isActive = target.checked;
+      if (role === "sort") patch.sortOrder = Number(target.value || "0");
+
+      try {
+        const res = await adminFetch(`/api/admin/teams/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(patch)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "อัปเดตทีมไม่สำเร็จ"));
+        setStatus("อัปเดตทีมสำเร็จ", "ok");
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    teamsBody.addEventListener("click", async (ev) => {
+      const btn = ev.target;
+      if (!(btn instanceof HTMLButtonElement)) return;
+      if (btn.dataset.role !== "delete") return;
+      const id = btn.dataset.id;
+      if (!id) return;
+      if (!confirm("ยืนยันลบทีมนี้?")) return;
+
+      try {
+        const res = await adminFetch(`/api/admin/teams/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "ลบทีมไม่สำเร็จ"));
+        await reloadAll();
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    (async () => {
+      try {
+        await loadAuthConfig();
+        await initGoogleLogin();
+
+        const hasSession = await loadCurrentAdmin();
+        if (hasSession) {
+          await reloadAll();
+        } else {
+          window.location.replace("/admin/login?next=%2Fadmin");
+        }
+      } catch (err) {
+        setStatus(err.message || "เกิดข้อผิดพลาด", "err");
+      }
+    })();
+  </script>
+</body>
+</html>

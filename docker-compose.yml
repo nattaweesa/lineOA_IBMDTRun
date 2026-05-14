@@ -1,0 +1,15 @@
+services:
+  lineoa-ibmdtrun:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lineoa-ibmdtrun
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: sh -c "npx prisma db push && node dist/index.js"
+    ports:
+      - "3010:3010"
+    volumes:
+      - ./data/public:/app/public
+      - ./data/sqlite:/app/data

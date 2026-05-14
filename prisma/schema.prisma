@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum SubmissionStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum ConversationMode {
+  IDLE
+  AWAITING_MANUAL_DISTANCE
+}
+
+model User {
+  id               String             @id @default(cuid())
+  lineUserId       String             @unique
+  displayName      String?
+  pictureUrl       String?
+  statusMessage    String?
+  bibNumber        String?
+  teamName         String?
+  latestDistanceKm Float              @default(0)
+  totalDistanceKm  Float              @default(0)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  submissions      Submission[]
+  conversation     ConversationState?
+  registration     Registration?
+}
+
+model Team {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  isActive      Boolean        @default(true)
+  sortOrder     Int            @default(0)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  registrations Registration[]
+
+  @@index([isActive, sortOrder])
+}
+
+model Registration {
+  id           String   @id @default(cuid())
+  lineUserId   String   @unique
+  displayName  String
+  fullName     String
+  gender       String
+  birthYear    Int
+  teamId       String
+  pictureUrl   String?
+  source       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  userId       String?  @unique
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Restrict)
+
+  @@index([teamId])
+  @@index([createdAt])
+}
+
+model Submission {
+  id                  String           @id @default(cuid())
+  userId              String
+  imageMessageId      String?
+  imagePath           String
+  sourceApp           String?
+  ocrText             String?
+  extractedDistanceKm Float
+  confirmedDistanceKm Float
+  status              SubmissionStatus @default(PENDING)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  confirmedAt         DateTime?
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([createdAt])
+}
+
+model ConversationState {
+  id                  String           @id @default(cuid())
+  userId              String           @unique
+  mode                ConversationMode @default(IDLE)
+  pendingSubmissionId String?
+  updatedAt           DateTime         @updatedAt
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

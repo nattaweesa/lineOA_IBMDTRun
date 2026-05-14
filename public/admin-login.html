@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IBMDT Run Admin Login</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap");
+
+    :root {
+      --bg: #eff7f3;
+      --card: #ffffff;
+      --text: #12271e;
+      --muted: #607168;
+      --line: #d7e3dc;
+      --accent: #0d7a59;
+      --accent-2: #16a379;
+      --danger: #bf3450;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Sans Thai", "Thonburi", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 10% 15%, rgba(191, 243, 224, 0.95), rgba(191, 243, 224, 0) 28%),
+        radial-gradient(circle at 92% 10%, rgba(255, 226, 203, 0.95), rgba(255, 226, 203, 0) 26%),
+        linear-gradient(145deg, #eef9f4 0%, #f5f8fb 52%, #fff8f0 100%);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .panel {
+      width: min(100%, 480px);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 26px 24px 24px;
+      box-shadow: 0 18px 44px rgba(18, 44, 34, 0.12);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .brand-mark {
+      width: 62px;
+      height: 62px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      background: linear-gradient(135deg, var(--accent-2), var(--accent));
+      box-shadow: 0 12px 24px rgba(13, 122, 89, 0.24);
+    }
+
+    .brand-copy small {
+      display: block;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent-2), #ff8b42);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 34px;
+      line-height: 1.1;
+      color: #164736;
+    }
+
+    .lead {
+      margin: 0;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .stack {
+      display: grid;
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .note {
+      border: 1px solid #dce8e1;
+      background: #f7fbf9;
+      border-radius: 16px;
+      padding: 14px;
+      color: #36564a;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .feature-list {
+      margin: 0;
+      padding-left: 18px;
+      color: #36564a;
+      display: grid;
+      gap: 6px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .status {
+      min-height: 24px;
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .ok { color: #15834c; }
+    .err { color: var(--danger); }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .ghost {
+      border: 1px solid var(--line);
+      background: #f4f8f6;
+      color: #264639;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .ghost:hover {
+      transform: translateY(-1px);
+    }
+
+    @media (max-width: 520px) {
+      .panel {
+        border-radius: 18px;
+        padding: 22px 18px 18px;
+      }
+
+      h1 {
+        font-size: 29px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <div class="brand">
+      <div class="brand-mark">VR</div>
+      <div class="brand-copy">
+        <small>IBMDT Run</small>
+        <h1>Admin Login</h1>
+      </div>
+    </div>
+    <p class="lead">เข้าสู่ระบบด้วยบัญชี Google ที่ได้รับสิทธิ์ก่อนเข้าหน้า IBMDT Run Admin</p>
+
+    <div class="stack">
+      <div class="note">
+        ใช้ Google Sign-In เพื่อยืนยันตัวตนเพียงขั้นตอนเดียว ระบบจะพาเข้าสู่หน้าที่คุณตั้งใจเปิดไว้ให้อัตโนมัติหลังล็อกอินสำเร็จ
+      </div>
+
+      <ul class="feature-list">
+        <li>เข้าใช้งานได้เฉพาะบัญชีที่ได้รับสิทธิ์เท่านั้น</li>
+        <li>Session ถูกเก็บใน cookie ที่ฝั่ง browser อ่านตรงๆ ไม่ได้</li>
+        <li>เมื่อล็อกอินสำเร็จ ระบบจะพากลับไปหน้า admin ทันที</li>
+      </ul>
+
+      <div id="googleLoginContainer"></div>
+
+      <div class="row">
+        <button id="backBtn" class="ghost" type="button">กลับหน้าหลัก LINE</button>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+  </main>
+
+  <script>
+    const qs = new URLSearchParams(window.location.search);
+    const googleLoginContainerEl = document.getElementById("googleLoginContainer");
+    const statusEl = document.getElementById("status");
+
+    function getSafeNextPath() {
+      const next = String(qs.get("next") || "/admin").trim();
+      if (!next.startsWith("/admin")) {
+        return "/admin";
+      }
+      if (next.startsWith("//")) {
+        return "/admin";
+      }
+      return next;
+    }
+
+    function setStatus(text, type) {
+      statusEl.textContent = text;
+      statusEl.className = "status " + (type || "");
+    }
+
+    async function loadAuthConfig() {
+      const res = await fetch("/api/auth/config", { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "โหลด config auth ไม่สำเร็จ");
+      }
+      return data;
+    }
+
+    async function loadCurrentAdmin() {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.status === 401) {
+        return null;
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "ตรวจสอบผู้ใช้ปัจจุบันไม่สำเร็จ");
+      }
+
+      return data.admin || null;
+    }
+
+    async function ensureGoogleSdk() {
+      if (window.google && window.google.accounts && window.google.accounts.id) {
+        return;
+      }
+
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    async function handleGoogleCredential(response) {
+      try {
+        if (!response || !response.credential) {
+          throw new Error("ไม่ได้รับ credential จาก Google");
+        }
+
+        setStatus("กำลังยืนยันตัวตน...", "");
+
+        const res = await fetch("/api/auth/google", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential: response.credential })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "Login ไม่สำเร็จ");
+        }
+
+        setStatus("เข้าสู่ระบบสำเร็จ กำลังพาไปหน้าแอดมิน...", "ok");
+        window.location.replace(getSafeNextPath());
+      } catch (err) {
+        setStatus(err.message || "เกิดข้อผิดพลาดตอน Sign in", "err");
+      }
+    }
+
+    async function initPage() {
+      const admin = await loadCurrentAdmin();
+      if (admin) {
+        window.location.replace(getSafeNextPath());
+        return;
+      }
+
+      const conf = await loadAuthConfig();
+      if (!conf.ssoEnabled || !conf.googleClientId) {
+        setStatus("Google SSO ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ", "err");
+        return;
+      }
+
+      await ensureGoogleSdk();
+      window.google.accounts.id.initialize({
+        client_id: conf.googleClientId,
+        callback: handleGoogleCredential,
+      });
+      window.google.accounts.id.renderButton(googleLoginContainerEl, {
+        theme: "outline",
+        size: "large",
+        text: "signin_with",
+        shape: "pill",
+      });
+    }
+
+    document.getElementById("backBtn").addEventListener("click", () => {
+      if (document.referrer) {
+        window.location.href = document.referrer;
+        return;
+      }
+
+      window.location.href = "https://line.me/";
+    });
+
+    initPage().catch((err) => {
+      setStatus(err.message || "เกิดข้อผิดพลาด", "err");
+    });
+  </script>
+</body>
+</html>

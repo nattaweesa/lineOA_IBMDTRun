@@ -1,0 +1,610 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IBMDT Run Register</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap");
+
+    :root {
+      --bg: #f3f7f4;
+      --card: #ffffff;
+      --text: #10221a;
+      --muted: #5e6d66;
+      --primary: #0a7c5b;
+      --primary-2: #13a279;
+      --accent: #ff8b42;
+      --border: #d3dfd8;
+      --danger: #bb2d3b;
+      --ring: rgba(19, 162, 121, 0.25);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans Thai", "Thonburi", sans-serif;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 8% 10%, #d8f4eb 0%, rgba(216, 244, 235, 0) 42%),
+        radial-gradient(circle at 92% 24%, #ffe9d8 0%, rgba(255, 233, 216, 0) 38%),
+        linear-gradient(145deg, #ecf8f3 0%, #f5f8fb 48%, #fef6ee 100%);
+      color: var(--text);
+      position: relative;
+      overflow-x: hidden;
+    }
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      z-index: -1;
+      border-radius: 999px;
+      filter: blur(2px);
+      opacity: .35;
+    }
+    body::before {
+      width: 220px;
+      height: 220px;
+      right: -60px;
+      bottom: 8%;
+      background: linear-gradient(130deg, #ffd6b6, #ff9f63);
+    }
+    body::after {
+      width: 180px;
+      height: 180px;
+      left: -70px;
+      top: 45%;
+      background: linear-gradient(130deg, #9eeed3, #3ec7a0);
+    }
+    .hero {
+      margin: 18px auto 0;
+      max-width: 760px;
+      border-radius: 24px;
+      padding: 24px 18px 20px;
+      background:
+        linear-gradient(110deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02)),
+        linear-gradient(125deg, var(--primary-2), var(--primary));
+      color: #fff;
+      text-align: center;
+      box-shadow: 0 16px 40px rgba(7, 65, 48, .28), inset 0 -1px 0 rgba(255,255,255,.22);
+      animation: riseIn .6s ease-out both;
+    }
+    .avatar {
+      width: 110px;
+      height: 110px;
+      border-radius: 999px;
+      object-fit: cover;
+      border: 3px solid rgba(255,255,255,.88);
+      background: rgba(255,255,255,.2);
+      display: inline-block;
+      box-shadow: 0 8px 22px rgba(0, 0, 0, .25);
+    }
+    .hero h1 {
+      margin: 10px 0 0;
+      font-size: 35px;
+      letter-spacing: .2px;
+    }
+    .hero p {
+      margin: 8px 0 0;
+      font-size: 15px;
+      opacity: .92;
+      font-weight: 500;
+    }
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 18px 14px 36px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid #dbe6df;
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 14px 36px rgba(18, 44, 34, .10);
+      position: relative;
+      overflow: hidden;
+      animation: riseIn .7s ease-out both;
+      animation-delay: .07s;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary-2), var(--accent));
+    }
+    .muted {
+      color: var(--muted);
+      margin: 0 0 14px;
+      font-weight: 500;
+    }
+    .grid {
+      display: grid;
+      gap: 13px;
+    }
+    label {
+      font-weight: 700;
+      display: block;
+      margin-bottom: 6px;
+      color: #1a3a2f;
+    }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 13px;
+      font-size: 16px;
+      outline: none;
+      background: #fdfefd;
+      transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    input::placeholder { color: #92a49a; }
+    input:hover, select:hover {
+      border-color: #acc8bc;
+    }
+    input:focus, select:focus {
+      border-color: var(--primary-2);
+      box-shadow: 0 0 0 4px var(--ring);
+      transform: translateY(-1px);
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .2s ease, opacity .2s ease;
+    }
+    .btn-primary {
+      background: linear-gradient(115deg, var(--primary-2), var(--primary));
+      color: #fff;
+      box-shadow: 0 10px 20px rgba(13, 116, 86, .26);
+    }
+    .btn-primary:hover { transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-light {
+      background: #eef5f1;
+      color: #27493c;
+    }
+    .btn-light:hover {
+      background: #e6f1eb;
+    }
+    .status {
+      margin-top: 12px;
+      min-height: 24px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 10px;
+      padding: 2px 2px;
+    }
+    .ok { color: #1f8e45; }
+    .err { color: var(--danger); }
+    .hidden { display: none; }
+    @keyframes riseIn {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @media (max-width: 520px) {
+      .hero {
+        margin: 0;
+        border-radius: 0 0 22px 22px;
+      }
+      .hero h1 { font-size: 29px; }
+      .card {
+        border-radius: 16px;
+        padding: 15px;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      .row button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <img id="avatar" class="avatar" alt="avatar" />
+    <h1 id="welcomeName">IBMDT Run</h1>
+    <p>ลงทะเบียนนักวิ่งให้ครบในครั้งเดียว แล้วอัปเดตได้ทุกเมื่อ</p>
+  </header>
+
+  <main class="wrap">
+    <section class="card">
+      <p class="muted">กรุณากรอกข้อมูลสมัครให้ครบถ้วน</p>
+      <form id="registerForm" class="grid">
+        <div id="lineUserIdBlock" class="hidden">
+          <label for="lineUserIdInput">LINE User ID</label>
+          <input id="lineUserIdInput" name="lineUserIdInput" placeholder="เช่น Uxxxxxxxxxxxxxxxx" />
+        </div>
+
+        <div>
+          <label for="displayName">Display Name (ชื่อที่แสดง)</label>
+          <input id="displayName" name="displayName" required />
+        </div>
+
+        <div>
+          <label for="fullName">Full Name (ชื่อ - นามสกุล)</label>
+          <input id="fullName" name="fullName" required />
+        </div>
+
+        <div>
+          <label for="gender">Gender (เพศ)</label>
+          <select id="gender" name="gender" required>
+            <option value="">-- เลือกเพศ --</option>
+            <option value="Male">Male (ชาย)</option>
+            <option value="Female">Female (หญิง)</option>
+            <option value="Other">Other (อื่นๆ)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="birthYear">Birth Year (ปีเกิด ค.ศ.)</label>
+          <select id="birthYear" name="birthYear" required>
+            <option value="">-- เลือกปีเกิด --</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="teamId">Team (ทีม)</label>
+          <select id="teamId" name="teamId" required>
+            <option value="">-- กำลังโหลดทีม --</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <button class="btn-primary" type="submit">Submit</button>
+          <button class="btn-light" type="button" id="cancelBtn">Cancel</button>
+        </div>
+      </form>
+
+      <div id="status" class="status"></div>
+    </section>
+  </main>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const tokenFromQuery = qs.get("t") || qs.get("token") || "";
+    const lineUserIdFromQuery = qs.get("lineUserId") || qs.get("userId") || qs.get("uid") || "";
+    const displayNameFromQuery = qs.get("displayName") || qs.get("name") || "";
+    const pictureUrlFromQuery = qs.get("pictureUrl") || qs.get("pic") || "";
+    let liffPictureUrl = "";
+
+    const avatarEl = document.getElementById("avatar");
+    const welcomeNameEl = document.getElementById("welcomeName");
+    const lineUserIdBlockEl = document.getElementById("lineUserIdBlock");
+    const lineUserIdInputEl = document.getElementById("lineUserIdInput");
+    const displayNameEl = document.getElementById("displayName");
+    const birthYearEl = document.getElementById("birthYear");
+    const teamEl = document.getElementById("teamId");
+    const formEl = document.getElementById("registerForm");
+    const statusEl = document.getElementById("status");
+    const fullNameEl = document.getElementById("fullName");
+    const genderEl = document.getElementById("gender");
+
+    let pendingTeamId = "";
+
+    function setStatus(text, type) {
+      statusEl.textContent = text;
+      statusEl.className = "status " + (type || "");
+    }
+
+    async function returnToLineChat() {
+      try {
+        if (window.liff && window.liff.isInClient()) {
+          setStatus("สมัครสำเร็จ กำลังกลับไปที่ LINE...", "ok");
+          setTimeout(() => window.liff.closeWindow(), 700);
+          return;
+        }
+      } catch (_err) {
+        // Fall through to browser fallback.
+      }
+
+      setStatus("สมัครสำเร็จแล้ว ขอบคุณครับ", "ok");
+    }
+
+    async function handleCancelRegistration() {
+      try {
+        if (window.liff && window.liff.isInClient()) {
+          setStatus("กำลังกลับไปที่ LINE...", "ok");
+          setTimeout(() => window.liff.closeWindow(), 250);
+          return;
+        }
+      } catch (_err) {
+        // Fall through to browser fallback.
+      }
+
+      if (window.history.length > 1) {
+        window.history.back();
+        return;
+      }
+
+      if (document.referrer) {
+        window.location.href = document.referrer;
+        return;
+      }
+
+      window.location.href = "https://line.me/";
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    async function applyTokenContext() {
+      if (!tokenFromQuery) {
+        return false;
+      }
+
+      const res = await fetch(`/api/public/register-context?t=${encodeURIComponent(tokenFromQuery)}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setStatus(data.error || "ลิงก์ลงทะเบียนไม่ถูกต้องหรือหมดอายุ", "err");
+        return false;
+      }
+
+      lineUserIdInputEl.value = data.lineUserId || "";
+      lineUserIdInputEl.readOnly = true;
+      lineUserIdBlockEl.classList.add("hidden");
+
+      if (data.displayName && !displayNameEl.value) {
+        displayNameEl.value = data.displayName;
+        welcomeNameEl.textContent = data.displayName;
+      }
+
+      if (data.pictureUrl) {
+        liffPictureUrl = data.pictureUrl;
+        avatarEl.src = data.pictureUrl;
+      }
+
+      return true;
+    }
+
+    function applyRegistrationToForm(registration) {
+      if (!registration) {
+        return;
+      }
+
+      if (registration.displayName) {
+        displayNameEl.value = registration.displayName;
+        welcomeNameEl.textContent = registration.displayName;
+      }
+
+      if (registration.fullName) {
+        fullNameEl.value = registration.fullName;
+      }
+
+      if (registration.gender) {
+        genderEl.value = registration.gender;
+      }
+
+      if (registration.birthYear) {
+        birthYearEl.value = String(registration.birthYear);
+      }
+
+      if (registration.teamId) {
+        pendingTeamId = registration.teamId;
+        teamEl.value = pendingTeamId;
+      }
+
+      if (registration.pictureUrl) {
+        liffPictureUrl = registration.pictureUrl;
+        avatarEl.src = registration.pictureUrl;
+      }
+    }
+
+    async function loadExistingRegistration(lineUserId) {
+      if (!lineUserId) {
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set("lineUserId", lineUserId);
+      if (tokenFromQuery) {
+        params.set("t", tokenFromQuery);
+      }
+
+      const res = await fetch(`/api/public/registration?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "โหลดข้อมูลสมัครเดิมไม่สำเร็จ");
+      }
+
+      if (data.registration) {
+        applyRegistrationToForm(data.registration);
+        setStatus("โหลดข้อมูลสมัครเดิมแล้ว สามารถแก้ไขและกด Submit ได้เลย", "ok");
+      }
+    }
+
+    async function initLiffIdentity() {
+      try {
+        const confRes = await fetch("/api/public/config");
+        const conf = await confRes.json();
+        const liffId = conf && conf.ok ? conf.liffId : "";
+
+        if (!liffId) {
+          return false;
+        }
+
+        if (!window.liff) {
+          await loadScript("https://static.line-scdn.net/liff/edge/2/sdk.js");
+        }
+
+        await window.liff.init({ liffId });
+        if (!window.liff.isLoggedIn()) {
+          window.liff.login({ redirectUri: window.location.href });
+          return false;
+        }
+
+        const profile = await window.liff.getProfile();
+        if (profile && profile.userId) {
+          lineUserIdInputEl.value = profile.userId;
+          lineUserIdInputEl.readOnly = true;
+          lineUserIdBlockEl.classList.add("hidden");
+        }
+
+        if (profile && profile.displayName && !displayNameEl.value) {
+          displayNameEl.value = profile.displayName;
+          welcomeNameEl.textContent = profile.displayName;
+        }
+
+        if (profile && profile.pictureUrl) {
+          liffPictureUrl = profile.pictureUrl;
+          avatarEl.src = profile.pictureUrl;
+        }
+
+        return true;
+      } catch (_err) {
+        return false;
+      }
+    }
+
+    function fillBirthYears() {
+      const currentYear = new Date().getFullYear();
+      for (let y = currentYear - 10; y >= 1940; y--) {
+        const op = document.createElement("option");
+        op.value = String(y);
+        op.textContent = String(y);
+        birthYearEl.appendChild(op);
+      }
+    }
+
+    async function loadTeams() {
+      const res = await fetch("/api/public/teams");
+      const data = await res.json();
+      if (!data.ok) {
+        throw new Error("โหลดทีมไม่สำเร็จ");
+      }
+
+      teamEl.innerHTML = "<option value=''>-- เลือกทีม --</option>";
+      for (const team of data.teams) {
+        const op = document.createElement("option");
+        op.value = team.id;
+        op.textContent = team.name;
+        teamEl.appendChild(op);
+      }
+
+      if (pendingTeamId) {
+        teamEl.value = pendingTeamId;
+      }
+
+      if (!data.teams.length) {
+        teamEl.innerHTML = "<option value=''>-- ยังไม่มีทีม กรุณาติดต่อแอดมิน --</option>";
+      }
+    }
+
+    avatarEl.src = pictureUrlFromQuery || "https://static.line-scdn.net/line_regulation/files/ver2/LINE_Icon.png";
+    displayNameEl.value = displayNameFromQuery;
+    welcomeNameEl.textContent = displayNameFromQuery || "IBMDT Run";
+    lineUserIdInputEl.value = lineUserIdFromQuery;
+    if (lineUserIdFromQuery) {
+      lineUserIdInputEl.readOnly = true;
+      lineUserIdBlockEl.classList.add("hidden");
+    } else {
+      lineUserIdBlockEl.classList.remove("hidden");
+    }
+
+    applyTokenContext()
+      .then((tokenOk) => {
+        if (tokenOk) {
+          setStatus("ยืนยันตัวตนจากลิงก์ลงทะเบียนแล้ว", "ok");
+          loadExistingRegistration(lineUserIdInputEl.value.trim()).catch((err) => {
+            setStatus(err.message || "โหลดข้อมูลไม่สำเร็จ", "err");
+          });
+          return;
+        }
+
+        initLiffIdentity().then((ok) => {
+          if (ok) {
+            setStatus("ยืนยันตัวตนผ่าน LINE แล้ว", "ok");
+            loadExistingRegistration(lineUserIdInputEl.value.trim()).catch((err) => {
+              setStatus(err.message || "โหลดข้อมูลไม่สำเร็จ", "err");
+            });
+          } else if (!lineUserIdInputEl.value.trim()) {
+            lineUserIdBlockEl.classList.remove("hidden");
+          } else {
+            loadExistingRegistration(lineUserIdInputEl.value.trim()).catch((err) => {
+              setStatus(err.message || "โหลดข้อมูลไม่สำเร็จ", "err");
+            });
+          }
+        });
+      })
+      .catch(() => {
+        if (!lineUserIdInputEl.value.trim()) {
+          lineUserIdBlockEl.classList.remove("hidden");
+        }
+      });
+
+    fillBirthYears();
+    loadTeams().catch((err) => setStatus(err.message || "โหลดข้อมูลไม่สำเร็จ", "err"));
+
+    formEl.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      setStatus("กำลังบันทึกข้อมูล...", "");
+
+      const lineUserId = lineUserIdInputEl.value.trim();
+
+      if (!lineUserId) {
+        setStatus("กรุณากรอก LINE User ID หรือเปิดลิงก์จากระบบ LINE", "err");
+        return;
+      }
+
+      const payload = {
+        lineUserId,
+        token: tokenFromQuery || undefined,
+        displayName: displayNameEl.value.trim(),
+        fullName: fullNameEl.value.trim(),
+        gender: genderEl.value,
+        birthYear: Number(birthYearEl.value),
+        teamId: teamEl.value,
+        pictureUrl: liffPictureUrl || pictureUrlFromQuery || undefined,
+        source: "web-register"
+      };
+
+      try {
+        const res = await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "บันทึกข้อมูลไม่สำเร็จ");
+        }
+
+        await returnToLineChat();
+      } catch (err) {
+        setStatus(err.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    document.getElementById("cancelBtn").addEventListener("click", () => {
+      handleCancelRegistration().catch(() => {
+        window.location.href = "https://line.me/";
+      });
+    });
+  </script>
+</body>
+</html>
