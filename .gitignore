@@ -6,3 +6,4 @@ prisma/dev.db-journal
 public/generated/*.png
 public/uploads/*
 !.gitkeep
+data/backups/

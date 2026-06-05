@@ -79,6 +79,46 @@ export async function createPendingSubmission(params: {
   return submission;
 }
 
+export async function createManualDistanceSubmission(params: {
+  userId: string;
+  imageMessageId: string;
+  imageBuffer: Buffer;
+  reason: string;
+}) {
+  const fileName = `${params.userId}-${Date.now()}-${params.imageMessageId}.jpg`;
+  const relativePath = `/uploads/${fileName}`;
+  const absolutePath = path.join(process.cwd(), "public", relativePath);
+
+  await saveBufferToFile(absolutePath, params.imageBuffer);
+
+  const submission = await prisma.submission.create({
+    data: {
+      userId: params.userId,
+      imageMessageId: params.imageMessageId,
+      imagePath: relativePath,
+      ocrText: params.reason,
+      extractedDistanceKm: 0,
+      confirmedDistanceKm: 0,
+      status: SubmissionStatus.PENDING,
+    },
+  });
+
+  await prisma.conversationState.upsert({
+    where: { userId: params.userId },
+    create: {
+      userId: params.userId,
+      mode: ConversationMode.AWAITING_MANUAL_DISTANCE,
+      pendingSubmissionId: submission.id,
+    },
+    update: {
+      mode: ConversationMode.AWAITING_MANUAL_DISTANCE,
+      pendingSubmissionId: submission.id,
+    },
+  });
+
+  return submission;
+}
+
 export async function getPendingSubmission(userId: string) {
   return prisma.submission.findFirst({
     where: {

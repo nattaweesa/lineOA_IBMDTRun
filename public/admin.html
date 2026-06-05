@@ -141,6 +141,28 @@
       grid-template-columns: 1fr;
       gap: 14px;
     }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .stat-box {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+      background: #fbfffd;
+    }
+    .stat-box strong {
+      display: block;
+      font-size: 22px;
+      color: #123f2e;
+    }
+    .stat-box span {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
     @media (min-width: 900px) {
       .split { grid-template-columns: 1fr 1.4fr; }
     }
@@ -162,11 +184,10 @@
       <div class="row">
         <strong>สถานะการเข้าใช้งาน</strong>
         <span id="authBadge" class="chip">ยังไม่ล็อกอิน</span>
-        <div id="googleLoginContainer"></div>
         <button id="logoutBtn" class="danger hidden">Logout</button>
         <button id="reloadBtn">รีโหลดข้อมูล</button>
       </div>
-      <p id="authHint" class="muted">ระบบรองรับ Google SSO และ session ที่ปลอดภัยด้วย HttpOnly cookie</p>
+      <p id="authHint" class="muted">ระบบใช้ username/password และ session ที่ปลอดภัยด้วย HttpOnly cookie</p>
       <div id="status" class="status"></div>
     </div>
 
@@ -175,14 +196,12 @@
         <h2>จัดการทีม</h2>
         <div class="row" style="margin-bottom: 10px">
           <input id="teamName" placeholder="ชื่อทีม" />
-          <input id="teamOrder" type="number" placeholder="Sort" value="0" style="width: 90px" />
           <button id="addTeamBtn" class="primary">เพิ่มทีม</button>
         </div>
         <table>
           <thead>
             <tr>
               <th>ชื่อทีม</th>
-              <th>Sort</th>
               <th>Active</th>
               <th>สมาชิก</th>
               <th>Action</th>
@@ -194,28 +213,63 @@
 
       <section id="regsSection" class="card locked">
         <h2>รายชื่อผู้สมัคร</h2>
+        <p id="regsSummary" class="muted">โหลดล่าสุด 200 รายการ</p>
         <table>
           <thead>
             <tr>
-              <th>เวลา</th>
+              <th>วันที่สมัคร</th>
               <th>Display</th>
-              <th>ชื่อจริง</th>
-              <th>เพศ</th>
-              <th>ปีเกิด</th>
               <th>ทีม</th>
-              <th>LINE User ID</th>
             </tr>
           </thead>
           <tbody id="regsBody"></tbody>
         </table>
       </section>
     </div>
+
+    <section id="maintenanceSection" class="card locked">
+      <h2>Production Maintenance</h2>
+      <div id="statsGrid" class="stats-grid"></div>
+      <div class="row">
+        <button id="backupBtn" class="primary">สร้าง Backup SQLite</button>
+        <button id="exportDbBtn">ดาวน์โหลด DB</button>
+        <button id="loadMetricsBtn">ดู Metrics</button>
+      </div>
+      <pre id="metricsBox" class="muted" style="white-space: pre-wrap; overflow:auto; max-height:220px"></pre>
+    </section>
+
+    <section id="adminUsersSection" class="card locked">
+      <h2>Admin Users</h2>
+      <p id="adminUsersHint" class="muted">สร้างแอดมินใหม่ แก้ชื่อโปรไฟล์ เปิด/ปิดบัญชี และตั้งรหัสผ่านใหม่</p>
+      <div class="row" style="margin-bottom: 10px">
+        <input id="newAdminUsername" placeholder="username" autocomplete="off" />
+        <input id="newAdminDisplayName" placeholder="ชื่อที่แสดง" autocomplete="off" />
+        <input id="newAdminPassword" placeholder="password อย่างน้อย 10 ตัว" type="password" autocomplete="new-password" />
+        <button id="addAdminUserBtn" class="primary">เพิ่ม Admin</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Profile</th>
+            <th>Active</th>
+            <th>Last Login</th>
+            <th>Password</th>
+          </tr>
+        </thead>
+        <tbody id="adminUsersBody"></tbody>
+      </table>
+      <div class="row" style="margin-top: 12px">
+        <input id="currentPassword" placeholder="รหัสผ่านปัจจุบัน" type="password" autocomplete="current-password" />
+        <input id="newOwnPassword" placeholder="รหัสผ่านใหม่ อย่างน้อย 10 ตัว" type="password" autocomplete="new-password" />
+        <button id="changeOwnPasswordBtn">เปลี่ยนรหัสผ่านของฉัน</button>
+      </div>
+    </section>
   </div>
 
   <script>
     const authBadgeEl = document.getElementById("authBadge");
     const authHintEl = document.getElementById("authHint");
-    const googleLoginContainerEl = document.getElementById("googleLoginContainer");
     const logoutBtnEl = document.getElementById("logoutBtn");
     const teamsSectionEl = document.getElementById("teamsSection");
     const regsSectionEl = document.getElementById("regsSection");
@@ -223,14 +277,23 @@
     const teamsBody = document.getElementById("teamsBody");
     const regsBody = document.getElementById("regsBody");
     const reloadBtnEl = document.getElementById("reloadBtn");
+    const maintenanceSectionEl = document.getElementById("maintenanceSection");
+    const adminUsersSectionEl = document.getElementById("adminUsersSection");
+    const statsGridEl = document.getElementById("statsGrid");
+    const regsSummaryEl = document.getElementById("regsSummary");
+    const metricsBoxEl = document.getElementById("metricsBox");
+    const adminUsersBody = document.getElementById("adminUsersBody");
+    const adminUsersHintEl = document.getElementById("adminUsersHint");
 
     const authState = {
       ssoEnabled: false,
       googleClientId: "",
+      passwordLoginEnabled: false,
       apiKeyFallbackEnabled: false,
       admin: null,
-      googleReady: false,
     };
+    const ADMIN_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+    let idleTimerId = null;
 
     function setStatus(text, type) {
       statusEl.textContent = text;
@@ -240,6 +303,17 @@
     function setLocked(locked) {
       teamsSectionEl.classList.toggle("locked", locked);
       regsSectionEl.classList.toggle("locked", locked);
+      maintenanceSectionEl.classList.toggle("locked", locked);
+      adminUsersSectionEl.classList.toggle("locked", locked);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
     function renderAuthState() {
@@ -260,15 +334,54 @@
       }
 
       logoutBtnEl.classList.toggle("hidden", !isAuthed);
-      googleLoginContainerEl.classList.toggle("hidden", !authState.ssoEnabled || isAuthed);
-      if (!authState.ssoEnabled) {
-        authHintEl.textContent = "ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID กรุณาติดต่อผู้ดูแลระบบ";
+      if (!isAuthed && idleTimerId) {
+        clearTimeout(idleTimerId);
+        idleTimerId = null;
+      }
+      if (!authState.passwordLoginEnabled) {
+        authHintEl.textContent = "ยังไม่ได้ตั้งค่า ADMIN_USERNAME / ADMIN_PASSWORD_HASH กรุณาติดต่อผู้ดูแลระบบ";
       } else if (!isAuthed) {
-        authHintEl.textContent = "กรุณา Sign in ด้วยบัญชี Google ที่ได้รับสิทธิ์ก่อนใช้งาน";
+        authHintEl.textContent = "กรุณาเข้าสู่ระบบด้วยบัญชีแอดมินก่อนใช้งาน";
       } else {
         authHintEl.textContent = "ยืนยันตัวตนสำเร็จ สามารถจัดการข้อมูลได้แล้ว";
       }
     }
+
+    function getLoginUrl(reason) {
+      const suffix = reason ? `&reason=${encodeURIComponent(reason)}` : "";
+      return `/admin/login?next=%2Fadmin${suffix}`;
+    }
+
+    async function redirectToLogin(reason) {
+      authState.admin = null;
+      renderAuthState();
+      try {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include"
+        });
+      } catch (_err) {
+        // Redirect even when the network call fails.
+      } finally {
+        window.location.replace(getLoginUrl(reason));
+      }
+    }
+
+    function resetIdleTimer() {
+      if (!authState.admin) {
+        return;
+      }
+      if (idleTimerId) {
+        clearTimeout(idleTimerId);
+      }
+      idleTimerId = setTimeout(() => {
+        redirectToLogin("idle");
+      }, ADMIN_IDLE_TIMEOUT_MS);
+    }
+
+    ["click", "keydown", "mousemove", "mousedown", "touchstart", "scroll"].forEach((eventName) => {
+      window.addEventListener(eventName, resetIdleTimer, { passive: true });
+    });
 
     function parseApiError(data, fallback) {
       if (data && typeof data.error === "string" && data.error) {
@@ -277,17 +390,22 @@
       return fallback;
     }
 
-    function adminFetch(url, options) {
+    async function adminFetch(url, options) {
       const headers = {
         "Content-Type": "application/json",
         ...(options && options.headers ? options.headers : {})
       };
 
-      return fetch(url, {
+      const res = await fetch(url, {
         ...(options || {}),
         credentials: "include",
         headers,
       });
+      if (res.status === 401) {
+        await redirectToLogin("expired");
+        throw new Error("Session expired");
+      }
+      return res;
     }
 
     async function loadAuthConfig() {
@@ -299,6 +417,7 @@
 
       authState.ssoEnabled = Boolean(data.ssoEnabled && data.googleClientId);
       authState.googleClientId = data.googleClientId || "";
+      authState.passwordLoginEnabled = Boolean(data.passwordLoginEnabled);
       authState.apiKeyFallbackEnabled = Boolean(data.apiKeyFallbackEnabled);
     }
 
@@ -317,72 +436,8 @@
 
       authState.admin = data.admin || null;
       renderAuthState();
+      resetIdleTimer();
       return true;
-    }
-
-    async function ensureGoogleSdk() {
-      if (window.google && window.google.accounts && window.google.accounts.id) {
-        return;
-      }
-
-      await new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.defer = true;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    }
-
-    async function handleGoogleCredential(response) {
-      try {
-        if (!response || !response.credential) {
-          throw new Error("ไม่ได้รับ credential จาก Google");
-        }
-
-        const res = await fetch("/api/auth/google", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ credential: response.credential })
-        });
-
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          throw new Error(parseApiError(data, "Login ไม่สำเร็จ"));
-        }
-
-        authState.admin = data.admin || null;
-        renderAuthState();
-        setStatus("เข้าสู่ระบบสำเร็จ", "ok");
-        await reloadAll();
-      } catch (err) {
-        setStatus(err.message || "เกิดข้อผิดพลาดตอน Sign in", "err");
-      }
-    }
-
-    async function initGoogleLogin() {
-      if (!authState.ssoEnabled) {
-        renderAuthState();
-        return;
-      }
-
-      await ensureGoogleSdk();
-      window.google.accounts.id.initialize({
-        client_id: authState.googleClientId,
-        callback: handleGoogleCredential,
-      });
-      googleLoginContainerEl.innerHTML = "";
-      window.google.accounts.id.renderButton(googleLoginContainerEl, {
-        theme: "outline",
-        size: "large",
-        text: "signin_with",
-        shape: "pill",
-      });
-      authState.googleReady = true;
-      renderAuthState();
     }
 
     async function loadTeams() {
@@ -397,7 +452,6 @@
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${t.name}</td>
-          <td><input type="number" value="${t.sortOrder}" data-role="sort" data-id="${t.id}" style="width:80px" /></td>
           <td><input type="checkbox" ${t.isActive ? "checked" : ""} data-role="active" data-id="${t.id}" /></td>
           <td>${t._count.registrations}</td>
           <td><button class="danger" data-role="delete" data-id="${t.id}">ลบ</button></td>
@@ -407,34 +461,105 @@
     }
 
     async function loadRegistrations() {
-      const res = await adminFetch("/api/admin/registrations");
+      const res = await adminFetch("/api/admin/registrations?limit=200");
       const data = await res.json();
       if (!res.ok || !data.ok) {
         throw new Error(parseApiError(data, "โหลดผู้สมัครไม่สำเร็จ"));
       }
 
+      regsSummaryEl.textContent = `ทั้งหมด ${data.total || 0} รายการ แสดงล่าสุด ${data.registrations.length} รายการ`;
       regsBody.innerHTML = "";
       for (const r of data.registrations) {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${new Date(r.createdAt).toLocaleString()}</td>
+          <td>${formatRegisterDate(r.createdAt)}</td>
           <td>${r.displayName}</td>
-          <td>${r.fullName}</td>
-          <td>${r.gender}</td>
-          <td>${r.birthYear}</td>
           <td>${r.team ? r.team.name : "-"}</td>
-          <td class="muted">${r.lineUserId}</td>
         `;
         regsBody.appendChild(tr);
       }
     }
 
-    async function reloadAll() {
-      if (!authState.admin) {
-        throw new Error("กรุณา Sign in ก่อนใช้งาน");
+    function renderStats(stats) {
+      const items = [
+        ["ผู้ใช้ LINE", stats.users],
+        ["ผู้สมัคร", stats.registrations],
+        ["ผลวิ่งทั้งหมด", stats.submissions],
+        ["ยืนยันแล้ว", stats.confirmedSubmissions],
+        ["รอตรวจสอบ", stats.pendingSubmissions],
+        ["ทีม", stats.teams],
+        ["รูป Upload", stats.files ? stats.files.uploads : 0],
+        ["รูป Summary", stats.files ? stats.files.generated : 0],
+      ];
+
+      statsGridEl.innerHTML = "";
+      for (const [label, value] of items) {
+        const box = document.createElement("div");
+        box.className = "stat-box";
+        box.innerHTML = `<strong>${value}</strong><span>${label}</span>`;
+        statsGridEl.appendChild(box);
+      }
+    }
+
+    async function loadMaintenanceStats() {
+      const res = await adminFetch("/api/admin/maintenance/stats");
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(parseApiError(data, "โหลด production stats ไม่สำเร็จ"));
+      }
+      renderStats(data.stats);
+    }
+
+    async function loadAdminUsers() {
+      const res = await adminFetch("/api/admin/users");
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(parseApiError(data, "โหลด admin users ไม่สำเร็จ"));
       }
 
-      await Promise.all([loadTeams(), loadRegistrations()]);
+      adminUsersHintEl.textContent = data.bootstrapEnvAdminEnabled
+        ? "Env admin ยังเปิดเป็น fallback อยู่ ควรสร้าง DB admin และปิด API/key fallback ใน prod"
+        : "จัดการ admin users จากฐานข้อมูล";
+      adminUsersBody.innerHTML = "";
+      for (const user of data.users) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>
+            <strong>${escapeHtml(user.username)}</strong><br />
+            <span class="muted">${escapeHtml(user.role || "admin")}</span>
+          </td>
+          <td>
+            <input value="${escapeHtml(user.displayName)}" data-role="displayName" data-id="${user.id}" />
+          </td>
+          <td><input type="checkbox" ${user.isActive ? "checked" : ""} data-role="adminActive" data-id="${user.id}" /></td>
+          <td>${user.lastLoginAt ? formatRegisterDate(user.lastLoginAt) : "-"}</td>
+          <td>
+            <input placeholder="รหัสผ่านใหม่" type="password" data-role="adminPassword" data-id="${user.id}" />
+            <button data-role="setAdminPassword" data-id="${user.id}">ตั้งใหม่</button>
+          </td>
+        `;
+        adminUsersBody.appendChild(tr);
+      }
+    }
+
+    function formatRegisterDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return "-";
+      }
+      return new Intl.DateTimeFormat("th-TH-u-ca-gregory", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(date);
+    }
+
+    async function reloadAll() {
+      if (!authState.admin) {
+        throw new Error("กรุณาเข้าสู่ระบบก่อนใช้งาน");
+      }
+
+      await Promise.all([loadTeams(), loadRegistrations(), loadMaintenanceStats(), loadAdminUsers()]);
       setStatus("โหลดข้อมูลสำเร็จ", "ok");
     }
 
@@ -443,19 +568,142 @@
     });
 
     logoutBtnEl.addEventListener("click", async () => {
+      await redirectToLogin();
+    });
+
+    document.getElementById("backupBtn").addEventListener("click", async () => {
       try {
-        await fetch("/api/auth/logout", {
+        setStatus("กำลังสร้าง backup...", "");
+        const res = await adminFetch("/api/admin/maintenance/backup", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "สร้าง backup ไม่สำเร็จ"));
+        setStatus(`สร้าง backup แล้ว: ${data.backup.backupDir}`, "ok");
+        await loadMaintenanceStats();
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    document.getElementById("exportDbBtn").addEventListener("click", () => {
+      window.location.href = "/api/admin/maintenance/export-db";
+    });
+
+    document.getElementById("loadMetricsBtn").addEventListener("click", async () => {
+      try {
+        const res = await adminFetch("/api/admin/maintenance/metrics");
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "โหลด metrics ไม่สำเร็จ"));
+        metricsBoxEl.textContent = JSON.stringify(data.metrics, null, 2);
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    document.getElementById("addAdminUserBtn").addEventListener("click", async () => {
+      const username = document.getElementById("newAdminUsername").value.trim();
+      const displayName = document.getElementById("newAdminDisplayName").value.trim();
+      const password = document.getElementById("newAdminPassword").value;
+      if (!username || !displayName || password.length < 10) {
+        setStatus("กรุณากรอก username, profile และ password อย่างน้อย 10 ตัว", "err");
+        return;
+      }
+
+      try {
+        const res = await adminFetch("/api/admin/users", {
           method: "POST",
-          credentials: "include"
+          body: JSON.stringify({ username, displayName, password, role: "admin", isActive: true })
         });
-      } finally {
-        window.location.replace("/admin/login?next=%2Fadmin");
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "สร้าง admin user ไม่สำเร็จ"));
+        document.getElementById("newAdminUsername").value = "";
+        document.getElementById("newAdminDisplayName").value = "";
+        document.getElementById("newAdminPassword").value = "";
+        await loadAdminUsers();
+        setStatus("สร้าง admin user สำเร็จ", "ok");
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    adminUsersBody.addEventListener("change", async (ev) => {
+      const target = ev.target;
+      if (!(target instanceof HTMLInputElement)) return;
+      const id = target.dataset.id;
+      const role = target.dataset.role;
+      if (!id || !role) return;
+
+      const patch = {};
+      if (role === "displayName") patch.displayName = target.value.trim();
+      if (role === "adminActive") patch.isActive = target.checked;
+      if (Object.keys(patch).length === 0) return;
+
+      try {
+        const res = await adminFetch(`/api/admin/users/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(patch)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "อัปเดต admin user ไม่สำเร็จ"));
+        setStatus("อัปเดต admin user สำเร็จ", "ok");
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+        await loadAdminUsers();
+      }
+    });
+
+    adminUsersBody.addEventListener("click", async (ev) => {
+      const btn = ev.target;
+      if (!(btn instanceof HTMLButtonElement)) return;
+      if (btn.dataset.role !== "setAdminPassword") return;
+      const id = btn.dataset.id;
+      if (!id) return;
+      const input = adminUsersBody.querySelector(`input[data-role="adminPassword"][data-id="${CSS.escape(id)}"]`);
+      const password = input instanceof HTMLInputElement ? input.value : "";
+      if (password.length < 10) {
+        setStatus("รหัสผ่านใหม่ต้องมีอย่างน้อย 10 ตัว", "err");
+        return;
+      }
+      if (!confirm("ยืนยันตั้งรหัสผ่านใหม่ให้ admin user นี้?")) return;
+
+      try {
+        const res = await adminFetch(`/api/admin/users/${id}/password`, {
+          method: "POST",
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "ตั้งรหัสผ่านใหม่ไม่สำเร็จ"));
+        input.value = "";
+        setStatus("ตั้งรหัสผ่านใหม่สำเร็จ", "ok");
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
+      }
+    });
+
+    document.getElementById("changeOwnPasswordBtn").addEventListener("click", async () => {
+      const currentPassword = document.getElementById("currentPassword").value;
+      const newPassword = document.getElementById("newOwnPassword").value;
+      if (!currentPassword || newPassword.length < 10) {
+        setStatus("กรุณากรอกรหัสผ่านปัจจุบัน และรหัสผ่านใหม่อย่างน้อย 10 ตัว", "err");
+        return;
+      }
+
+      try {
+        const res = await adminFetch("/api/admin/me/password", {
+          method: "POST",
+          body: JSON.stringify({ currentPassword, newPassword })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(parseApiError(data, "เปลี่ยนรหัสผ่านไม่สำเร็จ"));
+        document.getElementById("currentPassword").value = "";
+        document.getElementById("newOwnPassword").value = "";
+        setStatus("เปลี่ยนรหัสผ่านของคุณสำเร็จ", "ok");
+      } catch (e) {
+        setStatus(e.message || "เกิดข้อผิดพลาด", "err");
       }
     });
 
     document.getElementById("addTeamBtn").addEventListener("click", async () => {
       const name = document.getElementById("teamName").value.trim();
-      const sortOrder = Number(document.getElementById("teamOrder").value || "0");
       if (!name) {
         setStatus("กรุณากรอกชื่อทีม", "err");
         return;
@@ -464,7 +712,7 @@
       try {
         const res = await adminFetch("/api/admin/teams", {
           method: "POST",
-          body: JSON.stringify({ name, sortOrder, isActive: true })
+          body: JSON.stringify({ name, isActive: true })
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {
@@ -486,7 +734,6 @@
 
       const patch = {};
       if (role === "active") patch.isActive = target.checked;
-      if (role === "sort") patch.sortOrder = Number(target.value || "0");
 
       try {
         const res = await adminFetch(`/api/admin/teams/${id}`, {
@@ -522,13 +769,14 @@
     (async () => {
       try {
         await loadAuthConfig();
-        await initGoogleLogin();
+        renderAuthState();
 
         const hasSession = await loadCurrentAdmin();
         if (hasSession) {
+          resetIdleTimer();
           await reloadAll();
         } else {
-          window.location.replace("/admin/login?next=%2Fadmin");
+          window.location.replace(getLoginUrl());
         }
       } catch (err) {
         setStatus(err.message || "เกิดข้อผิดพลาด", "err");

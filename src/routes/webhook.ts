@@ -1,12 +1,14 @@
 import * as line from "@line/bot-sdk";
 import { ConversationMode } from "@prisma/client";
 import express from "express";
+import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { z } from "zod";
 import { env } from "../config/env";
 import { prisma } from "../db/prisma";
 import {
   cancelPendingSubmission,
+  createManualDistanceSubmission,
   confirmPendingSubmission,
   createPendingSubmission,
   ensureConversationState,
@@ -21,13 +23,46 @@ import { streamToBuffer, parseDistanceInput } from "../utils/line";
 import { createRegisterToken, verifyRegisterToken } from "../utils/register-token";
 import { generateSummaryCard } from "../services/summary-card.service";
 import {
+  clearUserData,
+  createMaintenanceBackup,
+  getMaintenanceStats,
+  getSqliteDatabasePathForExport,
+} from "../services/maintenance.service";
+import {
   ADMIN_SESSION_COOKIE,
+  createAdminPasswordHash,
   createAdminSessionToken,
   parseCookies,
   verifyAdminSessionToken,
+  verifyAdminPassword,
 } from "../utils/admin-auth";
 
 const router = express.Router();
+
+const requestMetrics = {
+  startedAt: new Date(),
+  total: 0,
+  byStatus: new Map<string, number>(),
+  byRoute: new Map<string, { count: number; totalMs: number; maxMs: number }>(),
+};
+
+router.use((request, response, next) => {
+  const started = Date.now();
+  response.on("finish", () => {
+    const elapsedMs = Date.now() - started;
+    requestMetrics.total += 1;
+    const statusKey = String(response.statusCode);
+    requestMetrics.byStatus.set(statusKey, (requestMetrics.byStatus.get(statusKey) || 0) + 1);
+
+    const routeKey = `${request.method} ${request.path}`;
+    const routeMetric = requestMetrics.byRoute.get(routeKey) || { count: 0, totalMs: 0, maxMs: 0 };
+    routeMetric.count += 1;
+    routeMetric.totalMs += elapsedMs;
+    routeMetric.maxMs = Math.max(routeMetric.maxMs, elapsedMs);
+    requestMetrics.byRoute.set(routeKey, routeMetric);
+  });
+  next();
+});
 
 const lineConfig: line.ClientConfig & line.MiddlewareConfig = {
   channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN,
@@ -60,13 +95,34 @@ const registerSchema = z.object({
 const createTeamSchema = z.object({
   name: z.string().trim().min(1),
   isActive: z.coerce.boolean().optional(),
-  sortOrder: z.coerce.number().int().optional(),
 });
 
 const updateTeamSchema = z.object({
   name: z.string().trim().min(1).optional(),
   isActive: z.coerce.boolean().optional(),
-  sortOrder: z.coerce.number().int().optional(),
+});
+
+const createAdminUserSchema = z.object({
+  username: z.string().trim().min(3).max(60).regex(/^[A-Za-z0-9._-]+$/),
+  displayName: z.string().trim().min(1).max(100),
+  password: z.string().min(10).max(200),
+  role: z.string().trim().min(1).max(40).default("admin"),
+  isActive: z.coerce.boolean().default(true),
+});
+
+const updateAdminUserSchema = z.object({
+  displayName: z.string().trim().min(1).max(100).optional(),
+  role: z.string().trim().min(1).max(40).optional(),
+  isActive: z.coerce.boolean().optional(),
+});
+
+const updateAdminPasswordSchema = z.object({
+  password: z.string().min(10).max(200),
+});
+
+const updateOwnPasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(10).max(200),
 });
 
 function normalizeThaiText(input: string): string {
@@ -89,6 +145,43 @@ const allowedAdminDomains = new Set(
 
 function isSsoEnabled(): boolean {
   return Boolean(env.GOOGLE_CLIENT_ID.trim());
+}
+
+async function isPasswordAuthEnabled(): Promise<boolean> {
+  if (env.ADMIN_USERNAME && env.ADMIN_PASSWORD_HASH) {
+    return true;
+  }
+
+  const adminCount = await prisma.adminUser.count({ where: { isActive: true } });
+  return adminCount > 0;
+}
+
+const passwordLoginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+
+function compareSecret(value: string, expected: string): boolean {
+  const valueBuffer = Buffer.from(value);
+  const expectedBuffer = Buffer.from(expected);
+  return valueBuffer.length === expectedBuffer.length && timingSafeEqual(valueBuffer, expectedBuffer);
+}
+
+function getPasswordLoginAttemptKey(request: express.Request, username: string): string {
+  return `${request.ip || request.socket.remoteAddress || "unknown"}:${username.toLowerCase()}`;
+}
+
+function isPasswordLoginLocked(key: string): boolean {
+  const attempt = passwordLoginAttempts.get(key);
+  return Boolean(attempt && attempt.lockedUntil > Date.now());
+}
+
+function recordPasswordLoginFailure(key: string) {
+  const existing = passwordLoginAttempts.get(key) || { count: 0, lockedUntil: 0 };
+  const count = existing.count + 1;
+  const lockedUntil = count >= 5 ? Date.now() + 10 * 60 * 1000 : 0;
+  passwordLoginAttempts.set(key, { count, lockedUntil });
+}
+
+function clearPasswordLoginFailure(key: string) {
+  passwordLoginAttempts.delete(key);
 }
 
 function isAllowedAdminEmail(email: string): boolean {
@@ -121,7 +214,7 @@ function setAdminSessionCookie(response: express.Response, sessionToken: string)
     secure: env.BASE_URL.startsWith("https://"),
     sameSite: "lax",
     path: "/",
-    maxAge: env.ADMIN_SESSION_TTL_HOURS * 60 * 60 * 1000,
+    maxAge: env.ADMIN_SESSION_IDLE_MINUTES * 60 * 1000,
   });
 }
 
@@ -142,6 +235,39 @@ function getAdminSessionFromRequest(request: express.Request) {
   }
 
   return verifyAdminSessionToken(token, env.ADMIN_SESSION_SECRET);
+}
+
+function createRefreshedAdminSession(response: express.Response, session: {
+  email: string;
+  name: string;
+  pictureUrl?: string;
+  adminUserId?: string;
+  role?: string;
+}) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expSec = nowSec + env.ADMIN_SESSION_IDLE_MINUTES * 60;
+  const sessionToken = createAdminSessionToken(
+    {
+      email: session.email,
+      name: session.name,
+      pictureUrl: session.pictureUrl ?? "",
+      adminUserId: session.adminUserId,
+      role: session.role ?? "admin",
+      iat: nowSec,
+      exp: expSec,
+    },
+    env.ADMIN_SESSION_SECRET,
+  );
+
+  setAdminSessionCookie(response, sessionToken);
+  return {
+    email: session.email,
+    name: session.name,
+    pictureUrl: session.pictureUrl ?? "",
+    adminUserId: session.adminUserId ?? "",
+    role: session.role ?? "admin",
+    exp: expSec,
+  };
 }
 
 function getSafeAdminNextPath(input: unknown): string {
@@ -191,6 +317,7 @@ async function verifyGoogleCredential(credential: string) {
 function checkAdminAuth(request: express.Request, response: express.Response, next: express.NextFunction) {
   const session = getAdminSessionFromRequest(request);
   if (session) {
+    createRefreshedAdminSession(response, session);
     next();
     return;
   }
@@ -209,7 +336,7 @@ function checkAdminAuth(request: express.Request, response: express.Response, ne
 function createUploadPrompt(): line.messagingApi.TextMessage {
   return {
     type: "text",
-    text: "สามารถส่งผลวิ่งได้โดย\n\n1. เลือกรูปแคปหน้าจอผลวิ่งจาก Strava, Apple Fitness หรือ Garmin\n2. ภาพต้องมีระยะทางชัดเจน\n3. ระบบจะอ่านค่าระยะทางให้ตรวจสอบก่อนส่งจริง",
+    text: "สามารถส่งผลวิ่งได้โดย\n\n1. ลงทะเบียนให้เรียบร้อยก่อนส่งผล\n2. เลือกรูปแคปหน้าจอผลวิ่งจาก Strava, Apple Fitness หรือ Garmin\n3. ภาพต้องมีระยะทางชัดเจน\n4. ระบบจะอ่านค่าระยะทางให้ตรวจสอบก่อนส่งจริง",
     quickReply: {
       items: [
         {
@@ -222,6 +349,87 @@ function createUploadPrompt(): line.messagingApi.TextMessage {
       ],
     },
   };
+}
+
+function createRegisterUrl(user: { lineUserId: string; displayName?: string | null; pictureUrl?: string | null }) {
+  const token = createRegisterToken({
+    lineUserId: user.lineUserId,
+    displayName: user.displayName,
+    pictureUrl: user.pictureUrl,
+    expiresInMinutes: 60,
+  });
+  const version = Date.now().toString(36);
+
+  if (env.LIFF_ID) {
+    return `https://liff.line.me/${env.LIFF_ID}?t=${encodeURIComponent(token)}&v=${version}`;
+  }
+
+  return `${env.BASE_URL}/profile?t=${encodeURIComponent(token)}&v=${version}`;
+}
+
+function createRegistrationRequiredMessages(
+  user: { lineUserId: string; displayName?: string | null; pictureUrl?: string | null },
+  reason = "ก่อนส่งผลวิ่ง กรุณาลงทะเบียนให้เรียบร้อยก่อนครับ",
+): line.messagingApi.Message[] {
+  const registerUrl = createRegisterUrl(user);
+  const greeting = user.displayName ? `สวัสดีครับ คุณ${user.displayName}` : "สวัสดีครับ";
+
+  return [
+    {
+      type: "flex",
+      altText: "ลงทะเบียนหรือแก้ไขข้อมูล IBMDT Run",
+      contents: {
+        type: "bubble",
+        body: {
+          type: "box",
+          layout: "vertical",
+          spacing: "md",
+          contents: [
+            { type: "text", text: greeting, weight: "bold", size: "lg", wrap: true },
+            { type: "text", text: reason, wrap: true, size: "sm", color: "#555555" },
+            {
+              type: "text",
+              text: "หากเคยลงทะเบียนแล้ว สามารถเปิดหน้านี้เพื่อแก้ไขหรืออัปเดตข้อมูลเดิมได้",
+              wrap: true,
+              size: "sm",
+              color: "#777777",
+            },
+            {
+              type: "text",
+              text: "ลิงก์นี้มีอายุ 60 นาที และใช้ได้เฉพาะบัญชี LINE ของคุณ",
+              wrap: true,
+              size: "xs",
+              color: "#999999",
+            },
+          ],
+        },
+        footer: {
+          type: "box",
+          layout: "vertical",
+          contents: [
+            {
+              type: "button",
+              style: "primary",
+              color: "#0B63CE",
+              action: {
+                type: "uri",
+                label: "ลงทะเบียน/แก้ไข",
+                uri: registerUrl,
+              },
+            },
+          ],
+        },
+      },
+    } as line.messagingApi.FlexMessage,
+  ];
+}
+async function hasRegistration(lineUserId: string) {
+  const registration = await prisma.registration.findUnique({
+    where: { lineUserId },
+    select: { id: true },
+  });
+
+  return Boolean(registration);
 }
 
 function formatDistance(value: number) {
@@ -425,6 +633,14 @@ async function handleTextEvent(event: line.MessageEvent) {
       await cancelPendingSubmission(pendingSubmission.id, user.id);
     }
 
+    if (!(await hasRegistration(user.lineUserId))) {
+      await client.replyMessage({
+        replyToken: event.replyToken,
+        messages: createRegistrationRequiredMessages(user),
+      });
+      return;
+    }
+
     await client.replyMessage({
       replyToken: event.replyToken,
       messages: [createUploadPrompt()],
@@ -438,7 +654,7 @@ async function handleTextEvent(event: line.MessageEvent) {
       messages: [
         {
           type: "text",
-          text: "วิธีส่งผลวิ่ง\n\n1. กดปุ่ม 'ส่งผลวิ่ง'\n2. เลือกรูปผลวิ่ง 1 รูป (Strava/Apple Fitness/Garmin)\n3. ตรวจระยะทางที่ระบบอ่านได้\n4. หากถูกต้องกด 'ยืนยัน' หรือกด 'แก้ไข' เพื่อพิมพ์ระยะใหม่",
+          text: "วิธีส่งผลวิ่ง\n\n1. ลงทะเบียนให้เรียบร้อย\n2. กดปุ่ม 'ส่งผลวิ่ง'\n3. เลือกรูปผลวิ่ง 1 รูป (Strava/Apple Fitness/Garmin)\n4. ตรวจระยะทางที่ระบบอ่านได้\n5. หากถูกต้องกด 'ยืนยัน' หรือกด 'แก้ไข' เพื่อพิมพ์ระยะใหม่",
           quickReply: {
             items: [
               {
@@ -467,22 +683,12 @@ async function handleTextEvent(event: line.MessageEvent) {
   }
 
   if (["ลงทะเบียน", "register", "สมัคร"].includes(normalizedText)) {
-    const token = createRegisterToken({
-      lineUserId: user.lineUserId,
-      displayName: user.displayName,
-      pictureUrl: user.pictureUrl,
-      expiresInMinutes: 60,
-    });
-    const registerUrl = `${env.BASE_URL}/profile?t=${encodeURIComponent(token)}`;
-
     await client.replyMessage({
       replyToken: event.replyToken,
-      messages: [
-        {
-          type: "text",
-          text: `ลิงก์ลงทะเบียนของคุณ\n${registerUrl}\n\nลิงก์นี้มีอายุ 60 นาที และใช้ได้เฉพาะบัญชีของคุณ`,
-        },
-      ],
+      messages: createRegistrationRequiredMessages(
+        user,
+        "ระบบจะผูกข้อมูลกับบัญชี LINE ของคุณให้อัตโนมัติครับ",
+      ),
     });
     return;
   }
@@ -616,17 +822,81 @@ async function handleImageEvent(event: line.MessageEvent) {
     return;
   }
 
+  if (!(await hasRegistration(user.lineUserId))) {
+    await client.replyMessage({
+      replyToken: event.replyToken,
+      messages: createRegistrationRequiredMessages(
+        user,
+        "ยังไม่สามารถรับรูปผลวิ่งได้ เพราะคุณยังไม่ได้ลงทะเบียนครับ",
+      ),
+    });
+    return;
+  }
+
   const imageStream = await blobClient.getMessageContent(event.message.id);
   const imageBuffer = await streamToBuffer(imageStream as never);
-  const submission = await createPendingSubmission({
-    userId: user.id,
-    imageMessageId: event.message.id,
-    imageBuffer,
-  });
+
+  try {
+    const submission = await createPendingSubmission({
+      userId: user.id,
+      imageMessageId: event.message.id,
+      imageBuffer,
+    });
+
+    await client.replyMessage({
+      replyToken: event.replyToken,
+      messages: createConfirmPrompt(submission.imagePath, submission.confirmedDistanceKm),
+    });
+  } catch (error) {
+    await createManualDistanceSubmission({
+      userId: user.id,
+      imageMessageId: event.message.id,
+      imageBuffer,
+      reason: error instanceof Error ? error.message : "OCR failed",
+    });
+
+    await client.replyMessage({
+      replyToken: event.replyToken,
+      messages: [
+        {
+          type: "text",
+          text:
+            "ระบบอ่านระยะทางจากรูปนี้ไม่ได้อัตโนมัติครับ\n\n" +
+            "กรุณาพิมพ์ระยะทางเป็นกิโลเมตร เช่น 5.24 แล้วระบบจะให้ตรวจสอบก่อนบันทึกผล",
+          quickReply: {
+            items: [
+              {
+                type: "action",
+                action: {
+                  type: "message",
+                  label: "ยกเลิก",
+                  text: "ยกเลิก",
+                },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  }
+}
+
+async function handlePostbackEvent(event: line.PostbackEvent) {
+  if (event.postback.data !== "action=register") {
+    return;
+  }
+
+  const user = await getOrCreateUser(event.source);
+  if (!user) {
+    return;
+  }
 
   await client.replyMessage({
     replyToken: event.replyToken,
-    messages: createConfirmPrompt(submission.imagePath, submission.confirmedDistanceKm),
+    messages: createRegistrationRequiredMessages(
+      user,
+      "ระบบจะผูกข้อมูลกับบัญชี LINE ของคุณให้อัตโนมัติครับ",
+    ),
   });
 }
 
@@ -643,15 +913,15 @@ async function handleEvent(event: line.WebhookEvent) {
         messages: [
           {
             type: "text",
-            text: "ยินดีต้อนรับสู่ระบบส่งผลวิ่ง กดปุ่มด้านล่างเพื่อเริ่มส่งผลวิ่งได้เลย",
+            text: "ยินดีต้อนรับสู่ระบบส่งผลวิ่ง กรุณาลงทะเบียนก่อนส่งผลวิ่งครั้งแรกครับ",
             quickReply: {
               items: [
                 {
                   type: "action",
                   action: {
                     type: "message",
-                    label: "ส่งผลวิ่ง",
-                    text: "ส่งผลวิ่ง",
+                    label: "ลงทะเบียน",
+                    text: "ลงทะเบียน",
                   },
                 },
               ],
@@ -659,6 +929,11 @@ async function handleEvent(event: line.WebhookEvent) {
           },
         ],
       });
+      return;
+    }
+
+    if (event.type === "postback") {
+      await handlePostbackEvent(event);
       return;
     }
 
@@ -702,6 +977,30 @@ router.get("/health", (_request, response) => {
   response.json({ ok: true });
 });
 
+router.get("/health/db", async (_request, response) => {
+  const started = Date.now();
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    response.json({
+      ok: true,
+      database: {
+        status: "ok",
+        latencyMs: Date.now() - started,
+      },
+    });
+  } catch (error) {
+    response.status(503).json({
+      ok: false,
+      database: {
+        status: "error",
+        latencyMs: Date.now() - started,
+      },
+      error: error instanceof Error ? error.message : "Database health check failed",
+    });
+  }
+});
+
 router.get("/debug/submissions", async (_request, response) => {
   const users = await prisma.user.findMany({
     include: {
@@ -719,7 +1018,7 @@ router.get("/debug/submissions", async (_request, response) => {
 router.get("/api/public/teams", async (_request, response) => {
   const teams = await prisma.team.findMany({
     where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    orderBy: { name: "asc" },
   });
   response.json({ ok: true, teams });
 });
@@ -731,11 +1030,12 @@ router.get("/api/public/config", async (_request, response) => {
   });
 });
 
-router.get("/api/auth/config", (_request, response) => {
+router.get("/api/auth/config", async (_request, response) => {
   response.json({
     ok: true,
     ssoEnabled: isSsoEnabled(),
     googleClientId: env.GOOGLE_CLIENT_ID || "",
+    passwordLoginEnabled: await isPasswordAuthEnabled(),
     apiKeyFallbackEnabled: env.ADMIN_ALLOW_API_KEY_FALLBACK,
   });
 });
@@ -749,12 +1049,7 @@ router.get("/api/auth/me", (request, response) => {
 
   response.json({
     ok: true,
-    admin: {
-      email: session.email,
-      name: session.name,
-      pictureUrl: session.pictureUrl ?? "",
-      exp: session.exp,
-    },
+    admin: createRefreshedAdminSession(response, session),
   });
 });
 
@@ -776,21 +1071,57 @@ router.post("/api/auth/google", express.json(), async (request, response) => {
     return;
   }
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  const expSec = nowSec + env.ADMIN_SESSION_TTL_HOURS * 60 * 60;
-  const sessionToken = createAdminSessionToken(
-    {
-      email: verified.profile.email,
-      name: verified.profile.name,
-      pictureUrl: verified.profile.pictureUrl,
-      iat: nowSec,
-      exp: expSec,
-    },
-    env.ADMIN_SESSION_SECRET,
-  );
+  const admin = createRefreshedAdminSession(response, verified.profile);
+  response.json({ ok: true, admin });
+});
 
-  setAdminSessionCookie(response, sessionToken);
-  response.json({ ok: true, admin: verified.profile });
+router.post("/api/auth/login", express.json(), async (request, response) => {
+  if (!(await isPasswordAuthEnabled())) {
+    response.status(400).json({ ok: false, error: "Username/password login is not configured" });
+    return;
+  }
+
+  const username = String(request.body?.username || "").trim();
+  const password = String(request.body?.password || "");
+  if (!username || !password) {
+    response.status(400).json({ ok: false, error: "Missing username or password" });
+    return;
+  }
+
+  const attemptKey = getPasswordLoginAttemptKey(request, username);
+  if (isPasswordLoginLocked(attemptKey)) {
+    response.status(429).json({ ok: false, error: "Too many login attempts. Please try again later." });
+    return;
+  }
+
+  const adminUser = await prisma.adminUser.findUnique({ where: { username } });
+  const dbPasswordOk = Boolean(adminUser?.isActive && verifyAdminPassword(password, adminUser.passwordHash));
+  const envPasswordOk = compareSecret(username, env.ADMIN_USERNAME) && verifyAdminPassword(password, env.ADMIN_PASSWORD_HASH);
+
+  if (!dbPasswordOk && !envPasswordOk) {
+    recordPasswordLoginFailure(attemptKey);
+    response.status(401).json({ ok: false, error: "Invalid username or password" });
+    return;
+  }
+
+  clearPasswordLoginFailure(attemptKey);
+
+  if (adminUser && dbPasswordOk) {
+    await prisma.adminUser.update({
+      where: { id: adminUser.id },
+      data: { lastLoginAt: new Date() },
+    });
+  }
+
+  const sessionAdmin = {
+    email: adminUser?.username || username,
+    name: adminUser?.displayName || username,
+    pictureUrl: "",
+    adminUserId: adminUser?.id,
+    role: adminUser?.role || "admin",
+  };
+  const admin = createRefreshedAdminSession(response, sessionAdmin);
+  response.json({ ok: true, admin });
 });
 
 router.post("/api/auth/logout", (_request, response) => {
@@ -811,11 +1142,18 @@ router.get("/api/public/register-context", async (request, response) => {
     return;
   }
 
+  let profile: { displayName?: string; pictureUrl?: string } | null = null;
+  try {
+    profile = await client.getProfile(payload.lineUserId);
+  } catch {
+    profile = null;
+  }
+
   response.json({
     ok: true,
     lineUserId: payload.lineUserId,
-    displayName: payload.displayName ?? "",
-    pictureUrl: payload.pictureUrl ?? "",
+    displayName: profile?.displayName || payload.displayName || "",
+    pictureUrl: profile?.pictureUrl || payload.pictureUrl || "",
   });
 });
 
@@ -938,6 +1276,147 @@ router.post("/api/register", express.json(), async (request, response) => {
   response.json({ ok: true, registration });
 });
 
+router.get("/api/admin/users", checkAdminAuth, async (_request, response) => {
+  const users = await prisma.adminUser.findMany({
+    orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      role: true,
+      isActive: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  response.json({
+    ok: true,
+    users,
+    bootstrapEnvAdminEnabled: Boolean(env.ADMIN_USERNAME && env.ADMIN_PASSWORD_HASH),
+  });
+});
+
+router.post("/api/admin/users", checkAdminAuth, express.json(), async (request, response) => {
+  const parsed = createAdminUserSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ ok: false, error: "Invalid payload", issues: parsed.error.flatten() });
+    return;
+  }
+
+  const payload = parsed.data;
+  const created = await prisma.adminUser.create({
+    data: {
+      username: payload.username,
+      displayName: payload.displayName,
+      passwordHash: createAdminPasswordHash(payload.password),
+      role: payload.role,
+      isActive: payload.isActive,
+    },
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      role: true,
+      isActive: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  response.status(201).json({ ok: true, user: created });
+});
+
+router.patch("/api/admin/users/:id", checkAdminAuth, express.json(), async (request, response) => {
+  const adminUserId = String(request.params.id);
+  const parsed = updateAdminUserSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ ok: false, error: "Invalid payload", issues: parsed.error.flatten() });
+    return;
+  }
+
+  const payload = parsed.data;
+  if (Object.keys(payload).length === 0) {
+    response.status(400).json({ ok: false, error: "Empty payload" });
+    return;
+  }
+
+  if (payload.isActive === false) {
+    const activeCount = await prisma.adminUser.count({
+      where: {
+        isActive: true,
+        id: { not: adminUserId },
+      },
+    });
+    if (activeCount === 0 && !(env.ADMIN_USERNAME && env.ADMIN_PASSWORD_HASH)) {
+      response.status(400).json({ ok: false, error: "Cannot deactivate the last active admin user" });
+      return;
+    }
+  }
+
+  const updated = await prisma.adminUser.update({
+    where: { id: adminUserId },
+    data: payload,
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+      role: true,
+      isActive: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  response.json({ ok: true, user: updated });
+});
+
+router.post("/api/admin/users/:id/password", checkAdminAuth, express.json(), async (request, response) => {
+  const adminUserId = String(request.params.id);
+  const parsed = updateAdminPasswordSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ ok: false, error: "Invalid payload", issues: parsed.error.flatten() });
+    return;
+  }
+
+  await prisma.adminUser.update({
+    where: { id: adminUserId },
+    data: { passwordHash: createAdminPasswordHash(parsed.data.password) },
+  });
+
+  response.json({ ok: true });
+});
+
+router.post("/api/admin/me/password", checkAdminAuth, express.json(), async (request, response) => {
+  const session = getAdminSessionFromRequest(request);
+  if (!session?.adminUserId) {
+    response.status(400).json({ ok: false, error: "Current session is not linked to a database admin user" });
+    return;
+  }
+
+  const parsed = updateOwnPasswordSchema.safeParse(request.body);
+  if (!parsed.success) {
+    response.status(400).json({ ok: false, error: "Invalid payload", issues: parsed.error.flatten() });
+    return;
+  }
+
+  const adminUser = await prisma.adminUser.findUnique({ where: { id: session.adminUserId } });
+  if (!adminUser || !adminUser.isActive || !verifyAdminPassword(parsed.data.currentPassword, adminUser.passwordHash)) {
+    response.status(401).json({ ok: false, error: "Current password is incorrect" });
+    return;
+  }
+
+  await prisma.adminUser.update({
+    where: { id: adminUser.id },
+    data: { passwordHash: createAdminPasswordHash(parsed.data.newPassword) },
+  });
+
+  response.json({ ok: true });
+});
+
 router.get("/api/admin/teams", checkAdminAuth, async (_request, response) => {
   const teams = await prisma.team.findMany({
     include: {
@@ -945,7 +1424,7 @@ router.get("/api/admin/teams", checkAdminAuth, async (_request, response) => {
         select: { registrations: true },
       },
     },
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    orderBy: { name: "asc" },
   });
   response.json({ ok: true, teams });
 });
@@ -962,7 +1441,7 @@ router.post("/api/admin/teams", checkAdminAuth, express.json(), async (request, 
     data: {
       name: payload.name,
       isActive: payload.isActive ?? true,
-      sortOrder: payload.sortOrder ?? 0,
+      sortOrder: 0,
     },
   });
 
@@ -1003,15 +1482,22 @@ router.delete("/api/admin/teams/:id", checkAdminAuth, async (request, response) 
   response.json({ ok: true });
 });
 
-router.get("/api/admin/registrations", checkAdminAuth, async (_request, response) => {
-  const registrations = await prisma.registration.findMany({
+router.get("/api/admin/registrations", checkAdminAuth, async (request, response) => {
+  const limit = Math.min(Math.max(Number(request.query.limit || 200), 1), 500);
+  const offset = Math.max(Number(request.query.offset || 0), 0);
+  const [total, registrations] = await Promise.all([
+    prisma.registration.count(),
+    prisma.registration.findMany({
     include: {
       team: true,
     },
     orderBy: { createdAt: "desc" },
-  });
+      take: limit,
+      skip: offset,
+    }),
+  ]);
 
-  response.json({ ok: true, registrations });
+  response.json({ ok: true, registrations, total, limit, offset });
 });
 
 router.delete("/api/admin/registrations/:id", checkAdminAuth, async (request, response) => {
@@ -1020,7 +1506,94 @@ router.delete("/api/admin/registrations/:id", checkAdminAuth, async (request, re
   response.json({ ok: true });
 });
 
+router.get("/api/admin/maintenance/stats", checkAdminAuth, async (_request, response) => {
+  try {
+    const stats = await getMaintenanceStats();
+    response.json({ ok: true, stats });
+  } catch (error) {
+    response.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Failed to load stats" });
+  }
+});
+
+router.get("/api/admin/maintenance/metrics", checkAdminAuth, (_request, response) => {
+  const routes = Array.from(requestMetrics.byRoute.entries())
+    .map(([route, metric]) => ({
+      route,
+      count: metric.count,
+      avgMs: Math.round(metric.totalMs / metric.count),
+      maxMs: metric.maxMs,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 25);
+
+  response.json({
+    ok: true,
+    metrics: {
+      startedAt: requestMetrics.startedAt,
+      uptimeSec: Math.round(process.uptime()),
+      totalRequests: requestMetrics.total,
+      byStatus: Object.fromEntries(requestMetrics.byStatus.entries()),
+      routes,
+    },
+  });
+});
+
+router.post("/api/admin/maintenance/backup", checkAdminAuth, async (_request, response) => {
+  try {
+    const backup = await createMaintenanceBackup();
+    response.json({
+      ok: true,
+      backup: {
+        backupDir: backup.backupDir,
+        stats: backup.stats,
+      },
+    });
+  } catch (error) {
+    response.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Backup failed" });
+  }
+});
+
+router.get("/api/admin/maintenance/export-db", checkAdminAuth, async (_request, response) => {
+  if (!env.ADMIN_EXPORT_DB_ENABLED) {
+    response.status(403).json({ ok: false, error: "Database export is disabled" });
+    return;
+  }
+
+  const sqlitePath = await getSqliteDatabasePathForExport();
+  if (!sqlitePath) {
+    response.status(400).json({ ok: false, error: "Database export currently supports SQLite only" });
+    return;
+  }
+
+  response.download(sqlitePath, `ibmdtrun-${new Date().toISOString().slice(0, 10)}.db`);
+});
+
+router.post("/api/admin/maintenance/clear-user-data", checkAdminAuth, express.json(), async (request, response) => {
+  try {
+    const confirmText = String(request.body?.confirm || "");
+    if (confirmText !== env.MAINTENANCE_CONFIRM_TEXT) {
+      response.status(400).json({ ok: false, error: "Confirmation text does not match" });
+      return;
+    }
+
+    const backup = await createMaintenanceBackup();
+    const stats = await clearUserData({ clearFiles: request.body?.clearFiles !== false });
+    response.json({
+      ok: true,
+      backup: {
+        backupDir: backup.backupDir,
+      },
+      stats,
+    });
+  } catch (error) {
+    response.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Clear user data failed" });
+  }
+});
+
 router.get("/profile", (_request, response) => {
+  response.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  response.set("Pragma", "no-cache");
+  response.set("Expires", "0");
   response.sendFile(path.join(process.cwd(), "public", "register.html"));
 });
 

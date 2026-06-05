@@ -8,7 +8,6 @@
     @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap");
 
     :root {
-      --bg: #eff7f3;
       --card: #ffffff;
       --text: #12271e;
       --muted: #607168;
@@ -16,6 +15,7 @@
       --accent: #0d7a59;
       --accent-2: #16a379;
       --danger: #bf3450;
+      --ring: rgba(22, 163, 121, .22);
     }
 
     * { box-sizing: border-box; }
@@ -26,8 +26,8 @@
       font-family: "IBM Plex Sans Thai", "Thonburi", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at 10% 15%, rgba(191, 243, 224, 0.95), rgba(191, 243, 224, 0) 28%),
-        radial-gradient(circle at 92% 10%, rgba(255, 226, 203, 0.95), rgba(255, 226, 203, 0) 26%),
+        radial-gradient(circle at 10% 15%, rgba(191, 243, 224, .95), rgba(191, 243, 224, 0) 28%),
+        radial-gradient(circle at 92% 10%, rgba(255, 226, 203, .95), rgba(255, 226, 203, 0) 26%),
         linear-gradient(145deg, #eef9f4 0%, #f5f8fb 52%, #fff8f0 100%);
       display: grid;
       place-items: center;
@@ -40,9 +40,18 @@
       border: 1px solid var(--line);
       border-radius: 24px;
       padding: 26px 24px 24px;
-      box-shadow: 0 18px 44px rgba(18, 44, 34, 0.12);
+      box-shadow: 0 18px 44px rgba(18, 44, 34, .12);
       position: relative;
       overflow: hidden;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent-2), #ff8b42);
     }
 
     .brand {
@@ -62,7 +71,7 @@
       font-weight: 700;
       color: #ffffff;
       background: linear-gradient(135deg, var(--accent-2), var(--accent));
-      box-shadow: 0 12px 24px rgba(13, 122, 89, 0.24);
+      box-shadow: 0 12px 24px rgba(13, 122, 89, .24);
     }
 
     .brand-copy small {
@@ -72,15 +81,6 @@
       letter-spacing: .4px;
       text-transform: uppercase;
       margin-bottom: 4px;
-    }
-
-    .panel::before {
-      content: "";
-      position: absolute;
-      inset: 0 auto auto 0;
-      width: 100%;
-      height: 4px;
-      background: linear-gradient(90deg, var(--accent-2), #ff8b42);
     }
 
     h1 {
@@ -96,62 +96,83 @@
       font-weight: 500;
     }
 
-    .stack {
+    form {
       display: grid;
-      gap: 16px;
+      gap: 14px;
       margin-top: 22px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      font-weight: 700;
+      color: #27483c;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 13px;
+      font: inherit;
+      background: #fbfefd;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--accent-2);
+      box-shadow: 0 0 0 4px var(--ring);
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 11px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: linear-gradient(120deg, var(--accent-2), var(--accent));
+      color: #ffffff;
+      box-shadow: 0 9px 18px rgba(13, 122, 89, .22);
+    }
+
+    .ghost {
+      border-color: var(--line);
+      background: #f4f8f6;
+      color: #264639;
     }
 
     .note {
       border: 1px solid #dce8e1;
       background: #f7fbf9;
       border-radius: 16px;
-      padding: 14px;
+      padding: 13px;
       color: #36564a;
       font-size: 15px;
       line-height: 1.55;
-    }
-
-    .feature-list {
-      margin: 0;
-      padding-left: 18px;
-      color: #36564a;
-      display: grid;
-      gap: 6px;
-      font-size: 15px;
-      line-height: 1.5;
+      margin-top: 18px;
     }
 
     .status {
       min-height: 24px;
       font-weight: 700;
       font-size: 15px;
+      margin-top: 12px;
     }
 
     .ok { color: #15834c; }
     .err { color: var(--danger); }
-
-    .row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .ghost {
-      border: 1px solid var(--line);
-      background: #f4f8f6;
-      color: #264639;
-      border-radius: 12px;
-      padding: 10px 14px;
-      font: inherit;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .ghost:hover {
-      transform: translateY(-1px);
-    }
 
     @media (max-width: 520px) {
       .panel {
@@ -159,55 +180,51 @@
         padding: 22px 18px 18px;
       }
 
-      h1 {
-        font-size: 29px;
-      }
+      h1 { font-size: 29px; }
+      .actions { display: grid; grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <main class="panel">
     <div class="brand">
-      <div class="brand-mark">VR</div>
+      <div class="brand-mark">IR</div>
       <div class="brand-copy">
         <small>IBMDT Run</small>
         <h1>Admin Login</h1>
       </div>
     </div>
-    <p class="lead">เข้าสู่ระบบด้วยบัญชี Google ที่ได้รับสิทธิ์ก่อนเข้าหน้า IBMDT Run Admin</p>
+    <p class="lead">เข้าสู่ระบบด้วยบัญชีแอดมินที่ได้รับสิทธิ์</p>
 
-    <div class="stack">
-      <div class="note">
-        ใช้ Google Sign-In เพื่อยืนยันตัวตนเพียงขั้นตอนเดียว ระบบจะพาเข้าสู่หน้าที่คุณตั้งใจเปิดไว้ให้อัตโนมัติหลังล็อกอินสำเร็จ
-      </div>
-
-      <ul class="feature-list">
-        <li>เข้าใช้งานได้เฉพาะบัญชีที่ได้รับสิทธิ์เท่านั้น</li>
-        <li>Session ถูกเก็บใน cookie ที่ฝั่ง browser อ่านตรงๆ ไม่ได้</li>
-        <li>เมื่อล็อกอินสำเร็จ ระบบจะพากลับไปหน้า admin ทันที</li>
-      </ul>
-
-      <div id="googleLoginContainer"></div>
-
-      <div class="row">
+    <form id="loginForm">
+      <label>
+        Username
+        <input id="username" name="username" autocomplete="username" required />
+      </label>
+      <label>
+        Password
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <div class="actions">
+        <button class="primary" type="submit">เข้าสู่ระบบ</button>
         <button id="backBtn" class="ghost" type="button">กลับหน้าหลัก LINE</button>
       </div>
+    </form>
 
-      <div id="status" class="status"></div>
-    </div>
+    <div class="note">ระบบใช้รหัสผ่านแบบ hash ในฝั่ง server และเก็บ session ด้วย HttpOnly cookie ที่ JavaScript อ่านตรงๆ ไม่ได้</div>
+    <div id="status" class="status"></div>
   </main>
 
   <script>
     const qs = new URLSearchParams(window.location.search);
-    const googleLoginContainerEl = document.getElementById("googleLoginContainer");
+    const formEl = document.getElementById("loginForm");
+    const usernameEl = document.getElementById("username");
+    const passwordEl = document.getElementById("password");
     const statusEl = document.getElementById("status");
 
     function getSafeNextPath() {
       const next = String(qs.get("next") || "/admin").trim();
-      if (!next.startsWith("/admin")) {
-        return "/admin";
-      }
-      if (next.startsWith("//")) {
+      if (!next.startsWith("/admin") || next.startsWith("//")) {
         return "/admin";
       }
       return next;
@@ -218,13 +235,13 @@
       statusEl.className = "status " + (type || "");
     }
 
-    async function loadAuthConfig() {
-      const res = await fetch("/api/auth/config", { credentials: "include" });
-      const data = await res.json();
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || "โหลด config auth ไม่สำเร็จ");
+    function renderReasonStatus() {
+      const reason = qs.get("reason");
+      if (reason === "idle") {
+        setStatus("ระบบ logout ให้แล้ว เพราะไม่มีการใช้งานเกิน 10 นาที", "err");
+      } else if (reason === "expired") {
+        setStatus("Session หมดอายุ กรุณาเข้าสู่ระบบใหม่", "err");
       }
-      return data;
     }
 
     async function loadCurrentAdmin() {
@@ -232,44 +249,38 @@
       if (res.status === 401) {
         return null;
       }
-
       const data = await res.json();
       if (!res.ok || !data.ok) {
         throw new Error(data.error || "ตรวจสอบผู้ใช้ปัจจุบันไม่สำเร็จ");
       }
-
       return data.admin || null;
     }
 
-    async function ensureGoogleSdk() {
-      if (window.google && window.google.accounts && window.google.accounts.id) {
-        return;
+    async function checkLoginReady() {
+      const res = await fetch("/api/auth/config", { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "โหลด config auth ไม่สำเร็จ");
       }
-
-      await new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.defer = true;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
+      if (!data.passwordLoginEnabled) {
+        setStatus("ยังไม่ได้ตั้งค่า ADMIN_USERNAME / ADMIN_PASSWORD_HASH กรุณาติดต่อผู้ดูแลระบบ", "err");
+        formEl.querySelector("button[type='submit']").disabled = true;
+      }
     }
 
-    async function handleGoogleCredential(response) {
+    formEl.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setStatus("กำลังเข้าสู่ระบบ...", "");
+
       try {
-        if (!response || !response.credential) {
-          throw new Error("ไม่ได้รับ credential จาก Google");
-        }
-
-        setStatus("กำลังยืนยันตัวตน...", "");
-
-        const res = await fetch("/api/auth/google", {
+        const res = await fetch("/api/auth/login", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ credential: response.credential })
+          body: JSON.stringify({
+            username: usernameEl.value.trim(),
+            password: passwordEl.value,
+          }),
         });
 
         const data = await res.json();
@@ -280,48 +291,28 @@
         setStatus("เข้าสู่ระบบสำเร็จ กำลังพาไปหน้าแอดมิน...", "ok");
         window.location.replace(getSafeNextPath());
       } catch (err) {
-        setStatus(err.message || "เกิดข้อผิดพลาดตอน Sign in", "err");
+        setStatus(err.message || "เกิดข้อผิดพลาดตอน login", "err");
       }
-    }
-
-    async function initPage() {
-      const admin = await loadCurrentAdmin();
-      if (admin) {
-        window.location.replace(getSafeNextPath());
-        return;
-      }
-
-      const conf = await loadAuthConfig();
-      if (!conf.ssoEnabled || !conf.googleClientId) {
-        setStatus("Google SSO ยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ", "err");
-        return;
-      }
-
-      await ensureGoogleSdk();
-      window.google.accounts.id.initialize({
-        client_id: conf.googleClientId,
-        callback: handleGoogleCredential,
-      });
-      window.google.accounts.id.renderButton(googleLoginContainerEl, {
-        theme: "outline",
-        size: "large",
-        text: "signin_with",
-        shape: "pill",
-      });
-    }
+    });
 
     document.getElementById("backBtn").addEventListener("click", () => {
       if (document.referrer) {
         window.location.href = document.referrer;
         return;
       }
-
       window.location.href = "https://line.me/";
     });
 
-    initPage().catch((err) => {
-      setStatus(err.message || "เกิดข้อผิดพลาด", "err");
-    });
+    loadCurrentAdmin()
+      .then((admin) => {
+        if (admin) {
+          window.location.replace(getSafeNextPath());
+          return;
+        }
+        renderReasonStatus();
+        return checkLoginReady();
+      })
+      .catch((err) => setStatus(err.message || "เกิดข้อผิดพลาด", "err"));
   </script>
 </body>
 </html>

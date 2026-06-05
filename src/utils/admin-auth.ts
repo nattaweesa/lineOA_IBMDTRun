@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const ADMIN_SESSION_COOKIE = "vr_admin_session";
 
@@ -6,9 +6,15 @@ export type AdminSessionPayload = {
   email: string;
   name: string;
   pictureUrl?: string;
+  adminUserId?: string;
+  role?: string;
   iat: number;
   exp: number;
 };
+
+const PASSWORD_HASH_ALGO = "pbkdf2-sha256";
+const PASSWORD_HASH_ITERATIONS = 310000;
+const PASSWORD_HASH_BYTES = 32;
 
 function base64UrlEncode(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
@@ -81,4 +87,41 @@ export function parseCookies(cookieHeader: string): Record<string, string> {
   }
 
   return out;
+}
+
+export function createAdminPasswordHash(password: string): string {
+  const salt = randomBytes(16);
+  const hash = pbkdf2Sync(password, salt, PASSWORD_HASH_ITERATIONS, PASSWORD_HASH_BYTES, "sha256");
+  return [
+    PASSWORD_HASH_ALGO,
+    String(PASSWORD_HASH_ITERATIONS),
+    salt.toString("base64url"),
+    hash.toString("base64url"),
+  ].join("$");
+}
+
+export function verifyAdminPassword(password: string, encodedHash: string): boolean {
+  const parts = encodedHash.split("$");
+  if (parts.length !== 4) {
+    return false;
+  }
+
+  const [algo, iterationsRaw, saltRaw, hashRaw] = parts;
+  if (algo !== PASSWORD_HASH_ALGO) {
+    return false;
+  }
+
+  const iterations = Number(iterationsRaw);
+  if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000) {
+    return false;
+  }
+
+  try {
+    const salt = Buffer.from(saltRaw, "base64url");
+    const expected = Buffer.from(hashRaw, "base64url");
+    const actual = pbkdf2Sync(password, salt, iterations, expected.length, "sha256");
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  } catch (_error) {
+    return false;
+  }
 }

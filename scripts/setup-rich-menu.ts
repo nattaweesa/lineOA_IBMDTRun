@@ -1,14 +1,10 @@
-import line from "@line/bot-sdk";
 import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 
 dotenv.config();
 
-const client = new line.Client({
-  channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
-  channelSecret: process.env.LINE_CHANNEL_SECRET!,
-});
+const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN!;
 
 const liffId = process.env.LIFF_ID || "";
 const registerUri = liffId ? `https://liff.line.me/${liffId}` : "";
@@ -71,8 +67,29 @@ const richMenuJson = {
   ],
 };
 
+async function lineApi(pathname: string, init: RequestInit = {}) {
+  const res = await fetch(`https://api.line.me${pathname}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${channelAccessToken}`,
+      ...(init.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`LINE API ${init.method || "GET"} ${pathname} failed: ${res.status} ${body}`);
+  }
+
+  const text = await res.text();
+  return text ? JSON.parse(text) : {};
+}
+
 async function setupRichMenu() {
   try {
+    if (!channelAccessToken) {
+      throw new Error("LINE_CHANNEL_ACCESS_TOKEN is not set");
+    }
     if (!fs.existsSync(richMenuImagePath)) {
       throw new Error(`Rich Menu image not found: ${richMenuImagePath}`);
     }
@@ -81,27 +98,37 @@ async function setupRichMenu() {
     console.log(`Using LIFF ID: ${liffId || "(not set)"}`);
 
     // Get existing rich menus first
-    const existingMenus = await client.getRichMenuList();
-    console.log(`Found ${existingMenus.length ?? 0} existing menus`);
+    const existing = await lineApi("/v2/bot/richmenu/list");
+    const existingMenus = existing.richmenus || [];
+    console.log(`Found ${existingMenus.length} existing menus`);
 
     // Delete existing menus if any
     if (existingMenus.length > 0) {
       for (const menu of existingMenus) {
         console.log(`Deleting old menu: ${menu.name}`);
-        await client.deleteRichMenu(menu.richMenuId);
+        await lineApi(`/v2/bot/richmenu/${menu.richMenuId}`, { method: "DELETE" });
       }
     }
 
     // Create new rich menu
-    const result = await client.createRichMenu(richMenuJson);
-    console.log(`✅ Rich Menu created: ${result}`);
+    const created = await lineApi("/v2/bot/richmenu", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(richMenuJson),
+    });
+    const richMenuId = created.richMenuId;
+    console.log(`✅ Rich Menu created: ${richMenuId}`);
 
     const image = fs.readFileSync(richMenuImagePath);
-    await client.setRichMenuImage(result, image, "image/png");
+    await lineApi(`/v2/bot/richmenu/${richMenuId}/content`, {
+      method: "POST",
+      headers: { "Content-Type": "image/png" },
+      body: image,
+    });
     console.log("✅ Rich Menu image uploaded");
 
     // Set as default rich menu
-    await client.setDefaultRichMenu(result);
+    await lineApi(`/v2/bot/user/all/richmenu/${richMenuId}`, { method: "POST" });
     console.log(`✅ Set as default Rich Menu`);
 
     console.log("\n🎉 Rich Menu setup complete!");

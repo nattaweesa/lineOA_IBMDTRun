@@ -119,6 +119,16 @@
       margin: 0 0 14px;
       font-weight: 500;
     }
+    .privacy-note {
+      margin: 14px 0 0;
+      color: #5b6c64;
+      font-size: 13px;
+      line-height: 1.55;
+      background: #f7fbf9;
+      border: 1px solid #dce8e1;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
     .grid {
       display: grid;
       gap: 13px;
@@ -273,16 +283,50 @@
         </div>
       </form>
 
+      <p class="privacy-note">
+        ข้อมูลนี้ใช้สำหรับยืนยันตัวตนผู้สมัคร จัดทีม และบันทึกผลวิ่งในกิจกรรม IBMDT Run เท่านั้น
+        หากต้องการแก้ไขหรือลบข้อมูล สามารถติดต่อผู้ดูแลระบบได้
+      </p>
+
       <div id="status" class="status"></div>
     </section>
   </main>
 
   <script>
-    const qs = new URLSearchParams(location.search);
-    const tokenFromQuery = qs.get("t") || qs.get("token") || "";
-    const lineUserIdFromQuery = qs.get("lineUserId") || qs.get("userId") || qs.get("uid") || "";
-    const displayNameFromQuery = qs.get("displayName") || qs.get("name") || "";
-    const pictureUrlFromQuery = qs.get("pictureUrl") || qs.get("pic") || "";
+    const searchParams = new URLSearchParams(location.search);
+    const hashParams = paramsFromHash();
+
+    function paramsFromHash() {
+      const rawHash = location.hash.startsWith("#") ? location.hash.slice(1) : location.hash;
+      if (!rawHash) return new URLSearchParams();
+      const queryStart = rawHash.indexOf("?");
+      return new URLSearchParams(queryStart >= 0 ? rawHash.slice(queryStart + 1) : rawHash);
+    }
+
+    function tokenFromState(value) {
+      if (!value) return "";
+      try {
+        const decoded = decodeURIComponent(value);
+        const stateUrl = new URL(decoded, location.origin);
+        return stateUrl.searchParams.get("t") || stateUrl.searchParams.get("token") || "";
+      } catch (_err) {
+        return "";
+      }
+    }
+
+    function readParam(keys) {
+      for (const key of keys) {
+        const direct = searchParams.get(key) || hashParams.get(key);
+        if (direct) return direct;
+      }
+      return "";
+    }
+
+    const liffState = searchParams.get("liff.state") || hashParams.get("liff.state") || "";
+    const tokenFromQuery = readParam(["t", "token"]) || tokenFromState(liffState);
+    const lineUserIdFromQuery = readParam(["lineUserId", "userId", "uid"]);
+    const displayNameFromQuery = readParam(["displayName", "name"]);
+    const pictureUrlFromQuery = readParam(["pictureUrl", "pic"]);
     let liffPictureUrl = "";
 
     const avatarEl = document.getElementById("avatar");
